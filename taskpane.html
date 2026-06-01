@@ -14,64 +14,237 @@
       color: #333;
       padding: 16px;
     }
-    h2 { font-size: 15px; font-weight: 600; margin-bottom: 6px; color: #c0392b; }
+
+    h2 { font-size: 15px; font-weight: 600; margin-bottom: 4px; color: #c0392b; }
     p.sub { font-size: 12px; color: #666; margin-bottom: 14px; line-height: 1.5; }
-    label { font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: #444; }
+
+    .detail-block {
+      background: #f7f7f7; border: 1px solid #e0e0e0; border-radius: 4px;
+      padding: 8px 10px; margin-bottom: 14px; font-size: 11px; color: #555;
+      line-height: 1.6; word-break: break-all;
+    }
+
+    .section-title {
+      font-size: 11px; font-weight: 600; color: #888;
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
+    }
+
+    /* Steps */
+    .step { display: none; }
+    .step.active { display: block; }
+
+    .step-label {
+      font-size: 11px; color: #888; margin-bottom: 4px;
+    }
+
+    .step h3 {
+      font-size: 13px; font-weight: 600; margin-bottom: 10px; color: #222;
+    }
+
+    /* Option buttons */
+    .options { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+
+    .option-btn {
+      padding: 9px 12px; border: 1.5px solid #ddd; border-radius: 5px;
+      background: #fff; text-align: left; cursor: pointer; font-size: 12px;
+      color: #333; transition: all 0.15s;
+    }
+    .option-btn:hover { border-color: #c0392b; background: #fdf6f5; }
+    .option-btn.selected { border-color: #c0392b; background: #fdf0ee; font-weight: 600; color: #c0392b; }
+
+    /* Additional notes */
     textarea {
-      width: 100%; height: 110px; border: 1px solid #ccc; border-radius: 4px;
+      width: 100%; height: 65px; border: 1px solid #ccc; border-radius: 4px;
       padding: 6px 8px; font-size: 12px; font-family: "Segoe UI", sans-serif;
       resize: vertical; margin-bottom: 12px;
     }
     textarea:focus { outline: none; border-color: #c0392b; }
-    button#reportBtn {
-      width: 100%; padding: 10px; background: #c0392b; color: #fff;
-      border: none; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer;
+
+    /* Nav buttons */
+    .nav { display: flex; gap: 8px; margin-top: 4px; }
+    .btn-back {
+      flex: 1; padding: 9px; background: #f0f0f0; color: #555;
+      border: none; border-radius: 4px; font-size: 12px; cursor: pointer;
     }
-    button#reportBtn:hover { background: #a93226; }
-    button#reportBtn:disabled { background: #aaa; cursor: not-allowed; }
+    .btn-back:hover { background: #e0e0e0; }
+    .btn-next {
+      flex: 2; padding: 9px; background: #c0392b; color: #fff;
+      border: none; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .btn-next:hover { background: #a93226; }
+    .btn-next:disabled { background: #aaa; cursor: not-allowed; }
+
+    /* Urgency badge */
+    .urgency-badge {
+      display: inline-block; padding: 3px 10px; border-radius: 12px;
+      font-size: 11px; font-weight: 700; margin-bottom: 10px;
+    }
+    .urgency-critical { background: #fdecea; color: #c0392b; }
+    .urgency-high { background: #fef3e2; color: #e67e22; }
+    .urgency-low { background: #eafaf1; color: #27ae60; }
+
     #status { margin-top: 12px; font-size: 12px; line-height: 1.5; display: none; }
     #status.success { color: #27ae60; display: block; }
     #status.error { color: #c0392b; display: block; }
-    .detail-block {
-      background: #f7f7f7; border: 1px solid #e0e0e0; border-radius: 4px;
-      padding: 8px 10px; margin-bottom: 12px; font-size: 11px; color: #555;
-      line-height: 1.6; word-break: break-all;
+
+    .progress {
+      display: flex; gap: 4px; margin-bottom: 14px;
     }
-    .section-title {
-      font-size: 11px; font-weight: 600; color: #888;
-      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;
+    .progress-dot {
+      height: 4px; flex: 1; border-radius: 2px; background: #e0e0e0;
+      transition: background 0.2s;
     }
+    .progress-dot.done { background: #c0392b; }
   </style>
 </head>
 <body>
+
   <h2>⚠️ Report Suspicious Email</h2>
-  <p class="sub">Think you clicked something bad? Fill in what happened below and hit the button. Your IT team will receive the full details of this email automatically.</p>
+  <p class="sub">Answer a few quick questions so IT has everything they need.</p>
 
-  <div class="section-title">Email Details Captured</div>
-  <div class="detail-block" id="emailDetails">Loading email details...</div>
+  <div class="section-title">Email Captured</div>
+  <div class="detail-block" id="emailDetails">Loading...</div>
 
-  <label for="userNote">What happened?</label>
-  <textarea id="userNote"></textarea>
+  <!-- Progress bar -->
+  <div class="progress">
+    <div class="progress-dot" id="dot0"></div>
+    <div class="progress-dot" id="dot1"></div>
+    <div class="progress-dot" id="dot2"></div>
+    <div class="progress-dot" id="dot3"></div>
+  </div>
 
-  <button id="reportBtn" onclick="sendReport()">🚨 Report to IT Now</button>
-  <div id="status"></div>
+  <!-- Step 1: Why suspicious -->
+  <div class="step active" id="step1">
+    <div class="step-label">Step 1 of 4</div>
+    <h3>Why does this email look suspicious?</h3>
+    <div class="options" id="opts1">
+      <button class="option-btn" onclick="selectOption('opts1', this)">The sender looks wrong or unfamiliar</button>
+      <button class="option-btn" onclick="selectOption('opts1', this)">I wasn't expecting this email</button>
+      <button class="option-btn" onclick="selectOption('opts1', this)">It's asking me to click a link or open a file</button>
+      <button class="option-btn" onclick="selectOption('opts1', this)">It's asking me to pay something or approve a transfer</button>
+      <button class="option-btn" onclick="selectOption('opts1', this)">I already clicked or opened something and I'm worried</button>
+    </div>
+    <div class="nav">
+      <button class="btn-next" id="next1" onclick="goToStep(2)" disabled>Next →</button>
+    </div>
+  </div>
+
+  <!-- Step 2: What did you interact with -->
+  <div class="step" id="step2">
+    <div class="step-label">Step 2 of 4</div>
+    <h3>What did you interact with?</h3>
+    <div class="options" id="opts2">
+      <button class="option-btn" onclick="selectOption('opts2', this)">I clicked a link</button>
+      <button class="option-btn" onclick="selectOption('opts2', this)">I opened an attachment</button>
+      <button class="option-btn" onclick="selectOption('opts2', this)">I entered my username or password</button>
+      <button class="option-btn" onclick="selectOption('opts2', this)">I approved a payment or money transfer</button>
+      <button class="option-btn" onclick="selectOption('opts2', this)">I didn't click or open anything</button>
+    </div>
+    <div class="nav">
+      <button class="btn-back" onclick="goToStep(1)">← Back</button>
+      <button class="btn-next" id="next2" onclick="goToStep(3)" disabled>Next →</button>
+    </div>
+  </div>
+
+  <!-- Step 3: How long ago -->
+  <div class="step" id="step3">
+    <div class="step-label">Step 3 of 4</div>
+    <h3>How long ago did this happen?</h3>
+    <div class="options" id="opts3">
+      <button class="option-btn" onclick="selectOption('opts3', this)">Just now (within the last 5 minutes)</button>
+      <button class="option-btn" onclick="selectOption('opts3', this)">Within the last hour</button>
+      <button class="option-btn" onclick="selectOption('opts3', this)">Earlier today</button>
+      <button class="option-btn" onclick="selectOption('opts3', this)">Yesterday or earlier</button>
+      <button class="option-btn" onclick="selectOption('opts3', this)">I'm not sure</button>
+    </div>
+    <div class="nav">
+      <button class="btn-back" onclick="goToStep(2)">← Back</button>
+      <button class="btn-next" id="next3" onclick="goToStep(4)" disabled>Next →</button>
+    </div>
+  </div>
+
+  <!-- Step 4: Additional details + send -->
+  <div class="step" id="step4">
+    <div class="step-label">Step 4 of 4</div>
+    <h3>Anything else IT should know?</h3>
+
+    <div id="urgencyBadge"></div>
+
+    <textarea id="userNote" placeholder="Optional: describe anything else that seemed off, or leave blank and hit Send."></textarea>
+
+    <div class="nav">
+      <button class="btn-back" onclick="goToStep(3)">← Back</button>
+      <button class="btn-next" onclick="sendReport()">🚨 Send Report</button>
+    </div>
+    <div id="status"></div>
+  </div>
 
   <script>
     var capturedData = {};
+    var answers = { reason: '', interaction: '', timing: '' };
 
     function decodeSafelink(url) {
       try {
-        // Extract the url= parameter from safelinks
         if (url.indexOf('safelinks.protection.outlook.com') !== -1) {
           var match = url.match(/[?&]url=([^&]+)/);
-          if (match) {
-            return decodeURIComponent(match[1]);
-          }
+          if (match) return decodeURIComponent(match[1]);
         }
         return url;
-      } catch(e) {
-        return url;
+      } catch(e) { return url; }
+    }
+
+    function selectOption(groupId, btn) {
+      var group = document.getElementById(groupId);
+      var btns = group.querySelectorAll('.option-btn');
+      btns.forEach(function(b) { b.classList.remove('selected'); });
+      btn.classList.add('selected');
+
+      // Enable next button for this step
+      var stepNum = groupId.replace('opts','');
+      var nextBtn = document.getElementById('next' + stepNum);
+      if (nextBtn) nextBtn.disabled = false;
+
+      // Store answer
+      if (groupId === 'opts1') answers.reason = btn.textContent;
+      if (groupId === 'opts2') answers.interaction = btn.textContent;
+      if (groupId === 'opts3') answers.timing = btn.textContent;
+    }
+
+    function goToStep(num) {
+      document.querySelectorAll('.step').forEach(function(s) { s.classList.remove('active'); });
+      document.getElementById('step' + num).classList.add('active');
+
+      // Update progress dots
+      for (var i = 0; i < 4; i++) {
+        var dot = document.getElementById('dot' + i);
+        dot.classList.toggle('done', i < num);
       }
+
+      // Show urgency badge on step 4
+      if (num === 4) showUrgency();
+    }
+
+    function getUrgency() {
+      var interaction = answers.interaction.toLowerCase();
+      var timing = answers.timing.toLowerCase();
+
+      if (interaction.indexOf('password') !== -1 || interaction.indexOf('credentials') !== -1 ||
+          interaction.indexOf('payment') !== -1 || interaction.indexOf('transfer') !== -1) {
+        return { level: 'CRITICAL', emoji: '🔴', class: 'urgency-critical' };
+      }
+      if (interaction.indexOf('link') !== -1 || interaction.indexOf('attachment') !== -1) {
+        if (timing.indexOf('just now') !== -1 || timing.indexOf('last hour') !== -1) {
+          return { level: 'HIGH', emoji: '🟠', class: 'urgency-high' };
+        }
+        return { level: 'HIGH', emoji: '🟠', class: 'urgency-high' };
+      }
+      return { level: 'LOW', emoji: '🟡', class: 'urgency-low' };
+    }
+
+    function showUrgency() {
+      var u = getUrgency();
+      var badge = document.getElementById('urgencyBadge');
+      badge.innerHTML = '<span class="urgency-badge ' + u.class + '">' + u.emoji + ' ' + u.level + ' PRIORITY</span>';
     }
 
     Office.onReady(function() {
@@ -80,6 +253,10 @@
       var senderName  = item.from ? item.from.displayName : "Unknown";
       var subject     = item.subject || "(no subject)";
       var receivedTime = item.dateTimeCreated ? item.dateTimeCreated.toLocaleString() : "Unknown";
+
+      // Get reporter identity from mailbox
+      var reporterEmail = Office.context.mailbox.userProfile.emailAddress || "Unknown";
+      var reporterName  = Office.context.mailbox.userProfile.displayName || "Unknown";
 
       item.getAllInternetHeadersAsync(function(headersResult) {
         var headers = (headersResult.status === Office.AsyncResultStatus.Succeeded)
@@ -91,7 +268,6 @@
 
           var urlMatches = bodyText.match(/https?:\/\/[^\s"'<>]+/g) || [];
           var uniqueRaw = [...new Set(urlMatches)];
-          // Decode safelinks to real destinations
           var decodedUrls = uniqueRaw.map(function(u) { return decodeSafelink(u); });
           var uniqueUrls = [...new Set(decodedUrls)];
 
@@ -103,13 +279,11 @@
             : "None";
 
           capturedData = {
-            sender: sender,
-            senderName: senderName,
-            subject: subject,
-            receivedTime: receivedTime,
-            headers: headers,
-            urls: uniqueUrls,
-            attachments: attachmentList
+            sender: sender, senderName: senderName, subject: subject,
+            receivedTime: receivedTime, headers: headers,
+            urls: uniqueUrls, attachments: attachmentList,
+            reporterEmail: reporterEmail, reporterName: reporterName,
+            reportedAt: new Date().toLocaleString()
           };
 
           document.getElementById("emailDetails").innerHTML =
@@ -117,26 +291,16 @@
             "<strong>Subject:</strong> " + subject + "<br>" +
             "<strong>Received:</strong> " + receivedTime + "<br>" +
             "<strong>Links found:</strong> " + (uniqueUrls.length > 0 ? uniqueUrls.length + " URL(s)" : "None") + "<br>" +
-            "<strong>Attachments:</strong> " + attachmentList;
-
-          // Pre-fill the user note with a structured prompt
-          document.getElementById("userNote").value =
-            "I am reporting this email because I believe it may be suspicious or I may have interacted with it accidentally.\n\n" +
-            "[ ] I clicked a link in this email\n" +
-            "[ ] I opened an attachment\n" +
-            "[ ] I entered my username or password somewhere\n" +
-            "[ ] I replied to this email\n" +
-            "[ ] I am not sure what I did — I just want IT to check it\n\n" +
-            "Additional details:\n(Please describe what happened or why this email looks suspicious)";
-
+            "<strong>Attachments:</strong> " + attachmentList + "<br>" +
+            "<strong>Reported by:</strong> " + reporterName + " (" + reporterEmail + ")";
         });
       });
     });
 
     function sendReport() {
-      var btn = document.getElementById("reportBtn");
       var status = document.getElementById("status");
-      var userNote = document.getElementById("userNote").value || "No additional notes provided.";
+      var userNote = document.getElementById("userNote").value || "No additional details provided.";
+      var urgency = getUrgency();
 
       var urlList = capturedData.urls && capturedData.urls.length > 0
         ? capturedData.urls.join("\n  - ")
@@ -144,15 +308,29 @@
 
       var emailBody = [
         "=== SUSPICIOUS EMAIL REPORT ===",
-        "This report was generated automatically by the Report Suspicious Email add-in.",
-        "Do not reply to this email — your IT team will follow up directly.",
+        "Generated automatically by the Report Suspicious Email add-in.",
+        "Do not reply to this email — follow up directly with the user.",
         "",
+        "--- URGENCY ---",
+        urgency.emoji + " " + urgency.level + " PRIORITY",
+        "",
+        "--- REPORTED BY ---",
+        "Name:     " + capturedData.reporterName,
+        "Email:    " + capturedData.reporterEmail,
+        "Reported: " + capturedData.reportedAt,
+        "",
+        "--- SUSPICIOUS EMAIL DETAILS ---",
         "SENDER:      " + capturedData.senderName + " <" + capturedData.sender + ">",
         "SUBJECT:     " + capturedData.subject,
         "RECEIVED:    " + capturedData.receivedTime,
         "ATTACHMENTS: " + capturedData.attachments,
         "",
-        "--- WHAT THE USER REPORTED ---",
+        "--- USER QUESTIONNAIRE ---",
+        "Why suspicious: " + answers.reason,
+        "Interaction:    " + answers.interaction,
+        "Time ago:       " + answers.timing,
+        "",
+        "Additional details:",
         userNote,
         "",
         "--- LINKS FOUND IN EMAIL (decoded) ---",
@@ -165,23 +343,19 @@
       try {
         Office.context.mailbox.displayNewMessageForm({
           toRecipients: ["support@mattnj.com"],
-          subject: "🚨 SUSPICIOUS EMAIL REPORT — " + capturedData.subject + " — from " + capturedData.sender,
+          subject: urgency.emoji + " " + urgency.level + " — SUSPICIOUS EMAIL — " + capturedData.subject + " — " + capturedData.reporterEmail,
           htmlBody: "<pre style='font-family:Consolas,monospace;font-size:12px;'>" +
             emailBody.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</pre>"
         });
 
-        btn.disabled = false;
-        btn.textContent = "🚨 Report to IT Now";
         status.className = "success";
         status.style.display = "block";
-        status.textContent = "✅ Draft opened — review your answers above, then click Send to notify IT. Do not click anything else in this email.";
+        status.textContent = "✅ Report drafted. Review and hit Send. Do not interact further with the suspicious email.";
 
       } catch(e) {
-        btn.disabled = false;
-        btn.textContent = "🚨 Report to IT Now";
         status.className = "error";
         status.style.display = "block";
-        status.textContent = "❌ Error opening draft: " + e.message;
+        status.textContent = "❌ Error: " + e.message;
       }
     }
   </script>
