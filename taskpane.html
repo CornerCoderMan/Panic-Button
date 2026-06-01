@@ -18,7 +18,7 @@
     p.sub { font-size: 12px; color: #666; margin-bottom: 14px; line-height: 1.5; }
     label { font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: #444; }
     textarea {
-      width: 100%; height: 70px; border: 1px solid #ccc; border-radius: 4px;
+      width: 100%; height: 110px; border: 1px solid #ccc; border-radius: 4px;
       padding: 6px 8px; font-size: 12px; font-family: "Segoe UI", sans-serif;
       resize: vertical; margin-bottom: 12px;
     }
@@ -45,19 +45,34 @@
 </head>
 <body>
   <h2>⚠️ Report Suspicious Email</h2>
-  <p class="sub">Think you clicked something bad? Hit the button below. Your IT team will be notified immediately with full details of this email.</p>
+  <p class="sub">Think you clicked something bad? Fill in what happened below and hit the button. Your IT team will receive the full details of this email automatically.</p>
 
   <div class="section-title">Email Details Captured</div>
   <div class="detail-block" id="emailDetails">Loading email details...</div>
 
-  <label for="userNote">What happened? (optional)</label>
-  <textarea id="userNote" placeholder="e.g. I clicked a link, I opened an attachment, I'm not sure..."></textarea>
+  <label for="userNote">What happened?</label>
+  <textarea id="userNote"></textarea>
 
   <button id="reportBtn" onclick="sendReport()">🚨 Report to IT Now</button>
   <div id="status"></div>
 
   <script>
     var capturedData = {};
+
+    function decodeSafelink(url) {
+      try {
+        // Extract the url= parameter from safelinks
+        if (url.indexOf('safelinks.protection.outlook.com') !== -1) {
+          var match = url.match(/[?&]url=([^&]+)/);
+          if (match) {
+            return decodeURIComponent(match[1]);
+          }
+        }
+        return url;
+      } catch(e) {
+        return url;
+      }
+    }
 
     Office.onReady(function() {
       var item = Office.context.mailbox.item;
@@ -75,7 +90,10 @@
             ? bodyResult.value : "";
 
           var urlMatches = bodyText.match(/https?:\/\/[^\s"'<>]+/g) || [];
-          var uniqueUrls = [...new Set(urlMatches)];
+          var uniqueRaw = [...new Set(urlMatches)];
+          // Decode safelinks to real destinations
+          var decodedUrls = uniqueRaw.map(function(u) { return decodeSafelink(u); });
+          var uniqueUrls = [...new Set(decodedUrls)];
 
           var attachments = item.attachments || [];
           var attachmentList = attachments.length > 0
@@ -100,6 +118,17 @@
             "<strong>Received:</strong> " + receivedTime + "<br>" +
             "<strong>Links found:</strong> " + (uniqueUrls.length > 0 ? uniqueUrls.length + " URL(s)" : "None") + "<br>" +
             "<strong>Attachments:</strong> " + attachmentList;
+
+          // Pre-fill the user note with a structured prompt
+          document.getElementById("userNote").value =
+            "I am reporting this email because I believe it may be suspicious or I may have interacted with it accidentally.\n\n" +
+            "[ ] I clicked a link in this email\n" +
+            "[ ] I opened an attachment\n" +
+            "[ ] I entered my username or password somewhere\n" +
+            "[ ] I replied to this email\n" +
+            "[ ] I am not sure what I did — I just want IT to check it\n\n" +
+            "Additional details:\n(Please describe what happened or why this email looks suspicious)";
+
         });
       });
     });
@@ -115,16 +144,18 @@
 
       var emailBody = [
         "=== SUSPICIOUS EMAIL REPORT ===",
+        "This report was generated automatically by the Report Suspicious Email add-in.",
+        "Do not reply to this email — your IT team will follow up directly.",
         "",
         "SENDER:      " + capturedData.senderName + " <" + capturedData.sender + ">",
         "SUBJECT:     " + capturedData.subject,
         "RECEIVED:    " + capturedData.receivedTime,
         "ATTACHMENTS: " + capturedData.attachments,
         "",
-        "--- USER NOTE ---",
+        "--- WHAT THE USER REPORTED ---",
         userNote,
         "",
-        "--- URLS FOUND IN EMAIL ---",
+        "--- LINKS FOUND IN EMAIL (decoded) ---",
         "  - " + urlList,
         "",
         "--- FULL INTERNET HEADERS ---",
@@ -134,16 +165,16 @@
       try {
         Office.context.mailbox.displayNewMessageForm({
           toRecipients: ["support@mattnj.com"],
-          subject: "SUSPICIOUS EMAIL REPORT — " + capturedData.subject + " — from " + capturedData.sender,
-          htmlBody: "<pre style='font-family:Consolas,monospace;font-size:12px;'>" + emailBody.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</pre>"
+          subject: "🚨 SUSPICIOUS EMAIL REPORT — " + capturedData.subject + " — from " + capturedData.sender,
+          htmlBody: "<pre style='font-family:Consolas,monospace;font-size:12px;'>" +
+            emailBody.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</pre>"
         });
 
-        // Reset button immediately after calling displayNewMessageForm
         btn.disabled = false;
         btn.textContent = "🚨 Report to IT Now";
         status.className = "success";
         status.style.display = "block";
-        status.textContent = "✅ Draft opened — review and click Send to notify IT. Do not interact further with the suspicious email.";
+        status.textContent = "✅ Draft opened — review your answers above, then click Send to notify IT. Do not click anything else in this email.";
 
       } catch(e) {
         btn.disabled = false;
