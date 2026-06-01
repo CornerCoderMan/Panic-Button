@@ -7,7 +7,6 @@
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
     body {
       font-family: "Segoe UI", sans-serif;
       font-size: 13px;
@@ -15,112 +14,36 @@
       color: #333;
       padding: 16px;
     }
-
-    h2 {
-      font-size: 15px;
-      font-weight: 600;
-      margin-bottom: 6px;
-      color: #c0392b;
-    }
-
-    p.sub {
-      font-size: 12px;
-      color: #666;
-      margin-bottom: 14px;
-      line-height: 1.5;
-    }
-
-    label {
-      font-size: 12px;
-      font-weight: 600;
-      display: block;
-      margin-bottom: 4px;
-      color: #444;
-    }
-
+    h2 { font-size: 15px; font-weight: 600; margin-bottom: 6px; color: #c0392b; }
+    p.sub { font-size: 12px; color: #666; margin-bottom: 14px; line-height: 1.5; }
+    label { font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: #444; }
     textarea {
-      width: 100%;
-      height: 70px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      padding: 6px 8px;
-      font-size: 12px;
-      font-family: "Segoe UI", sans-serif;
-      resize: vertical;
-      margin-bottom: 12px;
+      width: 100%; height: 70px; border: 1px solid #ccc; border-radius: 4px;
+      padding: 6px 8px; font-size: 12px; font-family: "Segoe UI", sans-serif;
+      resize: vertical; margin-bottom: 12px;
     }
-
-    textarea:focus {
-      outline: none;
-      border-color: #c0392b;
-    }
-
+    textarea:focus { outline: none; border-color: #c0392b; }
     button#reportBtn {
-      width: 100%;
-      padding: 10px;
-      background: #c0392b;
-      color: #fff;
-      border: none;
-      border-radius: 4px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
+      width: 100%; padding: 10px; background: #c0392b; color: #fff;
+      border: none; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer;
     }
-
-    button#reportBtn:hover {
-      background: #a93226;
-    }
-
-    button#reportBtn:disabled {
-      background: #aaa;
-      cursor: not-allowed;
-    }
-
-    #status {
-      margin-top: 12px;
-      font-size: 12px;
-      line-height: 1.5;
-      display: none;
-    }
-
-    #status.success {
-      color: #27ae60;
-      display: block;
-    }
-
-    #status.error {
-      color: #c0392b;
-      display: block;
-    }
-
+    button#reportBtn:hover { background: #a93226; }
+    button#reportBtn:disabled { background: #aaa; cursor: not-allowed; }
+    #status { margin-top: 12px; font-size: 12px; line-height: 1.5; display: none; }
+    #status.success { color: #27ae60; display: block; }
+    #status.error { color: #c0392b; display: block; }
     .detail-block {
-      background: #f7f7f7;
-      border: 1px solid #e0e0e0;
-      border-radius: 4px;
-      padding: 8px 10px;
-      margin-bottom: 12px;
-      font-size: 11px;
-      color: #555;
-      line-height: 1.6;
-      word-break: break-all;
+      background: #f7f7f7; border: 1px solid #e0e0e0; border-radius: 4px;
+      padding: 8px 10px; margin-bottom: 12px; font-size: 11px; color: #555;
+      line-height: 1.6; word-break: break-all;
     }
-
-    .detail-block strong {
-      color: #333;
-    }
-
     .section-title {
-      font-size: 11px;
-      font-weight: 600;
-      color: #888;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 4px;
+      font-size: 11px; font-weight: 600; color: #888;
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;
     }
   </style>
 </head>
 <body>
-
   <h2>⚠️ Report Suspicious Email</h2>
   <p class="sub">Think you clicked something bad? Hit the button below. Your IT team will be notified immediately with full details of this email.</p>
 
@@ -138,32 +61,27 @@
 
     Office.onReady(function() {
       var item = Office.context.mailbox.item;
-
       var sender      = item.from ? item.from.emailAddress : "Unknown";
       var senderName  = item.from ? item.from.displayName : "Unknown";
       var subject     = item.subject || "(no subject)";
       var receivedTime = item.dateTimeCreated ? item.dateTimeCreated.toLocaleString() : "Unknown";
 
-      // Grab internet headers for full routing/SPF info
       item.getAllInternetHeadersAsync(function(headersResult) {
         var headers = (headersResult.status === Office.AsyncResultStatus.Succeeded)
-          ? headersResult.value
-          : "Could not retrieve headers.";
+          ? headersResult.value : "Could not retrieve headers.";
 
-        // Grab body to extract URLs
         item.body.getAsync(Office.CoercionType.Text, function(bodyResult) {
           var bodyText = (bodyResult.status === Office.AsyncResultStatus.Succeeded)
-            ? bodyResult.value
-            : "";
+            ? bodyResult.value : "";
 
-          // Extract URLs from body
           var urlMatches = bodyText.match(/https?:\/\/[^\s"'<>]+/g) || [];
           var uniqueUrls = [...new Set(urlMatches)];
 
-          // Grab attachment names
           var attachments = item.attachments || [];
           var attachmentList = attachments.length > 0
-            ? attachments.map(function(a) { return a.name + " (" + (a.size ? Math.round(a.size/1024) + " KB" : "size unknown") + ")"; }).join(", ")
+            ? attachments.map(function(a) {
+                return a.name + " (" + (a.size ? Math.round(a.size/1024) + " KB" : "size unknown") + ")";
+              }).join(", ")
             : "None";
 
           capturedData = {
@@ -176,7 +94,6 @@
             attachments: attachmentList
           };
 
-          // Show summary in panel
           document.getElementById("emailDetails").innerHTML =
             "<strong>From:</strong> " + senderName + " &lt;" + sender + "&gt;<br>" +
             "<strong>Subject:</strong> " + subject + "<br>" +
@@ -191,11 +108,6 @@
       var btn = document.getElementById("reportBtn");
       var status = document.getElementById("status");
       var userNote = document.getElementById("userNote").value || "No additional notes provided.";
-
-      btn.disabled = true;
-      btn.textContent = "Sending report...";
-      status.className = "";
-      status.style.display = "none";
 
       var urlList = capturedData.urls && capturedData.urls.length > 0
         ? capturedData.urls.join("\n  - ")
@@ -219,19 +131,28 @@
         capturedData.headers
       ].join("\n");
 
-      // Compose and send via Outlook
-      Office.context.mailbox.displayNewMessageForm({
-        toRecipients: ["support@mattnj.com"],
-        subject: "🚨 SUSPICIOUS EMAIL REPORT — " + capturedData.subject + " — from " + capturedData.sender,
-        htmlBody: "<pre style='font-family:Consolas,monospace;font-size:12px;'>" + emailBody.replace(/</g, "&lt;").replace(/>/g, "&gt;") + "</pre>"
-      });
+      try {
+        Office.context.mailbox.displayNewMessageForm({
+          toRecipients: ["support@mattnj.com"],
+          subject: "SUSPICIOUS EMAIL REPORT — " + capturedData.subject + " — from " + capturedData.sender,
+          htmlBody: "<pre style='font-family:Consolas,monospace;font-size:12px;'>" + emailBody.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</pre>"
+        });
 
-      btn.disabled = false;
-      btn.textContent = "🚨 Report to IT Now";
-      status.className = "success";
-      status.textContent = "✅ Report drafted and opened. Review and hit Send to notify IT. Do not interact further with the suspicious email.";
+        // Reset button immediately after calling displayNewMessageForm
+        btn.disabled = false;
+        btn.textContent = "🚨 Report to IT Now";
+        status.className = "success";
+        status.style.display = "block";
+        status.textContent = "✅ Draft opened — review and click Send to notify IT. Do not interact further with the suspicious email.";
+
+      } catch(e) {
+        btn.disabled = false;
+        btn.textContent = "🚨 Report to IT Now";
+        status.className = "error";
+        status.style.display = "block";
+        status.textContent = "❌ Error opening draft: " + e.message;
+      }
     }
   </script>
-
 </body>
 </html>
