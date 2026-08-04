@@ -1,1 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Email Safety Checker</title>
+  <link rel="stylesheet" href="https://appsforoffice.microsoft.com/lib/1/hosted/office.css"/>
+  <link rel="stylesheet" href="taskpane.css"/>
+</head>
+<body class="ms-font-m ms-welcome">
 
+  <!-- Header -->
+  <div id="header">
+    <div id="header-inner">
+      <span id="shield-icon" class="shield">🛡️</span>
+      <div>
+        <div id="app-title">Email Safety Checker</div>
+        <div id="app-subtitle">Powered by rules + AI</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div id="main">
+
+    <!-- Idle state -->
+    <div id="idle-state">
+      <p class="hint-text">Open an email and click <strong>Analyze</strong> to check if it's safe.</p>
+      <button id="analyze-btn" class="btn btn-primary btn-full">
+        🔍 Analyze This Email
+      </button>
+      <p class="privacy-note">This pilot uses rule-based checks only. Message content is not sent to an AI service.</p>
+    </div>
+
+    <!-- Loading state -->
+    <div id="loading-state" class="hidden">
+      <div class="spinner-wrap">
+        <div class="spinner"></div>
+      </div>
+      <div id="loading-message" class="loading-text">Reading email…</div>
+      <div class="loading-sub">This usually takes 5–10 seconds</div>
+    </div>
+
+    <!-- Results state -->
+    <div id="results-state" class="hidden">
+
+      <!-- Verdict banner -->
+      <div id="verdict-banner">
+        <div id="verdict-icon"></div>
+        <div>
+          <div id="verdict-label"></div>
+          <div id="verdict-summary"></div>
+        </div>
+      </div>
+
+      <!-- Score bar -->
+      <div id="score-section">
+        <div class="score-label-row">
+          <span>Risk Score</span>
+          <span id="score-value"></span>
+        </div>
+        <div class="score-bar-bg">
+          <div id="score-bar" class="score-bar"></div>
+        </div>
+      </div>
+
+      <!-- Flags section -->
+      <div id="flags-section" class="hidden">
+        <div class="section-title">⚠️ Red Flags Found</div>
+        <ul id="flags-list"></ul>
+      </div>
+
+      <!-- Safe indicators -->
+      <div id="safe-section" class="hidden">
+        <div class="section-title">✅ Safety Indicators</div>
+        <ul id="safe-list"></ul>
+      </div>
+
+      <!-- Suggested actions -->
+      <div id="actions-section">
+        <div class="section-title">💡 Suggested Actions</div>
+        <div id="actions-list"></div>
+      </div>
+
+      <!-- AI analysis -->
+      <div id="ai-section" class="hidden">
+        <div class="section-title">🤖 AI Analysis</div>
+        <div id="ai-text"></div>
+      </div>
+
+      <div id="ai-warning" class="notice warning hidden" role="status"></div>
+
+      <!-- Re-analyze button -->
+      <button id="reanalyze-btn" class="btn btn-ghost btn-full" style="margin-top:16px;">
+        ↩ Analyze Another
+      </button>
+
+    </div>
+
+    <!-- Error state -->
+    <div id="error-state" class="hidden">
+      <div class="error-icon">⚠️</div>
+      <div id="error-message" class="error-text"></div>
+      <button id="retry-btn" class="btn btn-primary btn-full" style="margin-top:12px;">Try Again</button>
+    </div>
+
+  </div>
+
+  <!-- Footer -->
+  <div id="footer">
+    <span id="footer-status"></span>
+  </div>
+
+  <script src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
+  <script src="taskpane.js"></script>
+</body>
+</html>
