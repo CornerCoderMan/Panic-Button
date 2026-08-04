@@ -1,0 +1,17 @@
+{
+  "name": "email-safety-checker",
+  "version": "1.1.0",
+  "description": "Outlook Add-in to check if an email is safe using rule-based analysis and Claude AI",
+  "scripts": {
+    "start": "office-addin-dev-certs install --prompt && node server.js --https",
+    "start:http": "node server.js",
+    "install-certs": "office-addin-dev-certs install",
+    "test": "node --test --test-isolation=none",
+    "validate:manifest": "npx --yes office-addin-manifest@2.1.6 validate manifest.xml",
+    "check": "npm test && node --check taskpane.js && node --check server.js && npm run validate:manifest"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "office-addin-dev-certs": "^2.0.10"
+  }
+}
