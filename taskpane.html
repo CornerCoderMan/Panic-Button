@@ -1,859 +1,128 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Mail Guard — Analyze &amp; Report</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-  <style>
-    :root {
-      --bg:#f4f7fb;
-      --panel:#ffffff;
-      --ink:#1f2a44;
-      --muted:#6b7794;
-      --line:#e7ecf4;
-      --line2:#eef2f8;
-      --brand:#0ea5a4;
-      --brand-deep:#0b8584;
-      --brand-soft:#e6f7f6;
-      --safe:#16a34a; --safe-soft:#e8f7ee;
-      --warn:#d97706; --warn-soft:#fef3e2;
-      --danger:#dc2626; --danger-soft:#fdeceb;
-      --critical:#b91c1c; --critical-soft:#fbe7e7;
-      --font:'Nunito', 'Segoe UI', system-ui, sans-serif;
-      --shadow:0 1px 2px rgba(31,42,68,0.04), 0 4px 16px rgba(31,42,68,0.06);
-      --shadow-sm:0 1px 2px rgba(31,42,68,0.05);
-    }
-    * { box-sizing:border-box; margin:0; padding:0; }
-    body { font-family:var(--font); background:var(--bg); color:var(--ink); min-height:100vh; padding:16px; font-size:13px; line-height:1.5; }
-
-    @keyframes slideIn { from{opacity:0;transform:translateY(-6px);} to{opacity:1;transform:translateY(0);} }
-    @keyframes spin { to{transform:rotate(360deg);} }
-    @keyframes pop { 0%{transform:scale(0.96);opacity:0;} 100%{transform:scale(1);opacity:1;} }
-
-    /* Header */
-    header { display:flex; align-items:center; gap:11px; margin-bottom:16px; }
-    .shield-icon {
-      width:38px; height:38px; flex-shrink:0;
-      background:linear-gradient(150deg, var(--brand), var(--brand-deep));
-      border-radius:12px; display:flex; align-items:center; justify-content:center;
-      font-size:19px; box-shadow:0 4px 12px rgba(14,165,164,0.28);
-    }
-    header h1 { font-size:16px; font-weight:800; letter-spacing:-0.01em; color:var(--ink); }
-    header p { font-size:11.5px; color:var(--muted); margin-top:1px; font-weight:600; }
-
-    /* Cards */
-    .info-card {
-      background:var(--panel); border:1px solid var(--line); border-radius:14px;
-      padding:6px 16px; margin-bottom:14px; box-shadow:var(--shadow-sm);
-    }
-    .info-row { display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--line2); font-size:12.5px; }
-    .info-row:last-child { border-bottom:none; }
-    .info-label { color:var(--muted); font-weight:600; }
-    .info-value { font-weight:700; text-align:right; max-width:60%; word-break:break-all; color:var(--ink); }
-
-    /* Primary button */
-    .its-btn {
-      display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:13px;
-      background:linear-gradient(150deg, var(--brand), var(--brand-deep)); border:none; border-radius:13px;
-      color:#fff; font-size:14px; font-weight:800; cursor:pointer; font-family:var(--font);
-      letter-spacing:-0.01em; box-shadow:0 6px 16px rgba(14,165,164,0.26); transition:transform .12s, box-shadow .12s, opacity .12s;
-    }
-    .its-btn:hover { transform:translateY(-1px); box-shadow:0 10px 22px rgba(14,165,164,0.32); }
-    .its-btn:active { transform:translateY(0); }
-    .its-btn:disabled { opacity:0.55; cursor:default; transform:none; box-shadow:none; }
-
-    /* Loading */
-    #safety-loading { display:none; text-align:center; padding:20px; color:var(--muted); font-size:12px; font-weight:600; }
-    .mini-spinner { width:22px; height:22px; border:2.5px solid var(--brand-soft); border-top-color:var(--brand); border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 10px; }
-
-    /* Verdict banner */
-    #alert-line { display:none; border-radius:13px; padding:13px 15px; margin-top:14px; font-size:12.5px; font-weight:700; line-height:1.5; animation:pop .25s ease; border:1px solid transparent; }
-    #alert-line.critical { background:var(--critical-soft); border-color:#f3c6c6; color:var(--critical); }
-    #alert-line.danger   { background:var(--danger-soft);   border-color:#f6cfcd; color:var(--danger); }
-    #alert-line.warn     { background:var(--warn-soft);      border-color:#f5dcae; color:#b45309; }
-    #alert-line.safe     { background:var(--safe-soft);      border-color:#bfe6cd; color:var(--safe); }
-    .alert-prefix { font-size:11px; text-transform:uppercase; letter-spacing:0.06em; opacity:0.85; display:block; margin-bottom:3px; font-weight:800; }
-    .alert-reason { display:block; font-weight:600; }
-
-    /* Results */
-    #safety-section { display:none; margin-top:16px; }
-    .safety-title { font-size:11px; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted); margin-bottom:10px; font-weight:800; }
-    .score-wrap { background:var(--panel); border:1px solid var(--line); border-radius:13px; padding:13px 15px; margin-bottom:12px; box-shadow:var(--shadow-sm); }
-    .score-label-row { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-bottom:8px; font-weight:700; }
-    #score-num { color:var(--ink); font-weight:800; }
-    .score-track { height:8px; background:var(--line); border-radius:99px; overflow:hidden; }
-    .score-fill { height:100%; border-radius:99px; transition:width .7s cubic-bezier(.4,0,.2,1); }
-
-    /* Check cards */
-    .check-card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:11px 13px; margin-bottom:7px; display:flex; gap:11px; align-items:flex-start; box-shadow:var(--shadow-sm); }
-    .check-card.pass { border-left:4px solid var(--safe); }
-    .check-card.warn { border-left:4px solid var(--warn); }
-    .check-card.fail { border-left:4px solid var(--danger); }
-    .check-card.info { border-left:4px solid var(--brand); }
-    .check-icon { font-size:16px; flex-shrink:0; margin-top:1px; }
-    .check-body { flex:1; min-width:0; }
-    .check-name { font-size:12.5px; font-weight:800; color:var(--ink); }
-    .check-desc { font-size:11.5px; color:var(--muted); margin-top:2px; line-height:1.5; font-weight:600; }
-    .chk-badge { font-size:9.5px; font-weight:800; padding:3px 8px; border-radius:99px; white-space:nowrap; flex-shrink:0; letter-spacing:0.02em; }
-    .badge-pass { background:var(--safe-soft);   color:var(--safe); }
-    .badge-warn { background:var(--warn-soft);   color:#b45309; }
-    .badge-fail { background:var(--danger-soft); color:var(--danger); }
-    .badge-info { background:var(--brand-soft);  color:var(--brand-deep); }
-
-    /* Report button */
-    .report-btn { display:none; width:100%; margin-top:14px; padding:13px; background:linear-gradient(150deg,#ef4444,#dc2626); border:none; border-radius:13px; color:#fff; font-size:14px; font-weight:800; cursor:pointer; font-family:var(--font); letter-spacing:-0.01em; box-shadow:0 6px 16px rgba(220,38,38,0.24); transition:transform .12s, box-shadow .12s; }
-    .report-btn:hover { transform:translateY(-1px); box-shadow:0 10px 22px rgba(220,38,38,0.3); }
-
-    /* Questionnaire */
-    #questionnaire { display:none; margin-top:16px; background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px; box-shadow:var(--shadow); }
-    .progress { display:flex; gap:5px; margin-bottom:16px; }
-    .progress-dot { height:5px; flex:1; border-radius:99px; background:var(--line); transition:background .25s; }
-    .progress-dot.done { background:var(--brand); }
-    .step { display:none; }
-    .step.active { display:block; animation:slideIn .25s ease; }
-    .step-label { font-size:11px; color:var(--brand-deep); margin-bottom:5px; font-weight:800; text-transform:uppercase; letter-spacing:0.05em; }
-    .step h3 { font-size:14px; font-weight:800; margin-bottom:12px; color:var(--ink); letter-spacing:-0.01em; }
-    .options { display:flex; flex-direction:column; gap:7px; margin-bottom:14px; }
-    .option-btn { padding:11px 13px; border:1.5px solid var(--line); border-radius:11px; background:#fff; text-align:left; cursor:pointer; font-size:12.5px; color:var(--ink); font-family:var(--font); font-weight:600; transition:all .14s; }
-    .option-btn:hover { border-color:var(--brand); background:var(--brand-soft); }
-    .option-btn.selected { border-color:var(--brand); background:var(--brand-soft); font-weight:800; color:var(--brand-deep); box-shadow:0 0 0 3px rgba(14,165,164,0.1); }
-    textarea { width:100%; height:70px; border:1.5px solid var(--line); border-radius:11px; padding:9px 11px; font-size:12.5px; font-family:var(--font); background:#fff; color:var(--ink); resize:vertical; margin-bottom:13px; font-weight:600; }
-    textarea:focus { outline:none; border-color:var(--brand); box-shadow:0 0 0 3px rgba(14,165,164,0.1); }
-    .nav { display:flex; gap:9px; }
-    .btn-back { flex:1; padding:11px; background:#f1f4f9; color:var(--muted); border:none; border-radius:11px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:var(--font); transition:background .14s; }
-    .btn-back:hover { background:var(--line); }
-    .btn-next { flex:2; padding:11px; background:linear-gradient(150deg, var(--brand), var(--brand-deep)); color:#fff; border:none; border-radius:11px; font-size:12.5px; font-weight:800; cursor:pointer; font-family:var(--font); transition:opacity .14s; }
-    .btn-next:disabled { background:#cbd5e1; cursor:not-allowed; }
-    .urgency-badge { display:inline-block; padding:4px 12px; border-radius:99px; font-size:11px; font-weight:800; margin-bottom:12px; letter-spacing:0.03em; }
-    .urgency-critical { background:var(--critical-soft); color:var(--critical); }
-    .urgency-high { background:var(--warn-soft); color:#b45309; }
-    .urgency-low { background:var(--safe-soft); color:var(--safe); }
-    #status { margin-top:11px; font-size:12px; line-height:1.5; display:none; font-weight:700; }
-    #status.success { color:var(--safe); display:block; }
-    #status.error { color:var(--danger); display:block; }
-
-    footer { margin-top:18px; text-align:center; font-size:10px; color:#aeb8cc; font-weight:600; }
-  </style>
+  <title>Report This!</title>
+  <link rel="stylesheet" href="https://appsforoffice.microsoft.com/lib/1/hosted/office.css"/>
+  <link rel="stylesheet" href="taskpane.css"/>
 </head>
-<body>
+<body class="ms-font-m ms-welcome">
 
-  <header>
-    <div class="shield-icon">🛡️</div>
-    <div>
-      <h1>Mail Guard</h1>
-      <p>Check an email, then report it if it's not right</p>
-    </div>
-  </header>
-
-  <div class="info-card">
-    <div class="info-row"><span class="info-label">Sender</span><span class="info-value" id="info-sender">—</span></div>
-    <div class="info-row"><span class="info-label">Domain</span><span class="info-value" id="info-domain">—</span></div>
-    <div class="info-row"><span class="info-label">Subject</span><span class="info-value" id="info-subject">—</span></div>
-    <div class="info-row"><span class="info-label">Links</span><span class="info-value" id="info-links">—</span></div>
-    <div class="info-row"><span class="info-label">Attachments</span><span class="info-value" id="info-attach">—</span></div>
-  </div>
-
-  <button class="its-btn" id="its-btn" onclick="runSafetyCheck()">🔍 Check if this email is safe</button>
-
-  <div id="safety-loading">
-    <div class="mini-spinner"></div>
-    Checking this email…<br>
-    <span id="safety-status" style="font-size:10px;color:var(--muted)"></span>
-  </div>
-
-  <div id="alert-line">
-    <span class="alert-prefix" id="alert-prefix"></span>
-    <span class="alert-reason" id="alert-reason"></span>
-  </div>
-
-  <div id="safety-section">
-    <div class="safety-title">What we checked</div>
-    <div class="score-wrap">
-      <div class="score-label-row"><span>Safety Score</span><span id="score-num"></span></div>
-      <div class="score-track"><div class="score-fill" id="score-fill"></div></div>
-    </div>
-    <div id="checks-container"></div>
-  </div>
-
-  <button class="report-btn" id="report-btn" onclick="showQuestionnaire()">🚨 Report this to IT</button>
-
-  <div id="questionnaire">
-    <div class="progress">
-      <div class="progress-dot" id="dot0"></div><div class="progress-dot" id="dot1"></div>
-      <div class="progress-dot" id="dot2"></div><div class="progress-dot" id="dot3"></div>
-    </div>
-
-    <div class="step active" id="step1">
-      <div class="step-label">Step 1 of 4</div>
-      <h3>Why does this email look suspicious?</h3>
-      <div class="options" id="opts1">
-        <button class="option-btn" onclick="selectOption('opts1',this)">The sender looks wrong or unfamiliar</button>
-        <button class="option-btn" onclick="selectOption('opts1',this)">I wasn't expecting this email</button>
-        <button class="option-btn" onclick="selectOption('opts1',this)">It's asking me to click a link or open a file</button>
-        <button class="option-btn" onclick="selectOption('opts1',this)">It's asking me to pay something or approve a transfer</button>
-        <button class="option-btn" onclick="selectOption('opts1',this)">I already clicked or opened something and I'm worried</button>
+  <!-- Header -->
+  <div id="header">
+    <div id="header-inner">
+      <span id="shield-icon" class="shield">🚩</span>
+      <div>
+        <div id="app-title">Report This!</div>
+        <div id="app-subtitle">Report a suspicious email to IT</div>
       </div>
-      <div class="nav"><button class="btn-next" id="next1" onclick="goToStep(2)" disabled>Next →</button></div>
-    </div>
-
-    <div class="step" id="step2">
-      <div class="step-label">Step 2 of 4</div>
-      <h3>What did you interact with?</h3>
-      <div class="options" id="opts2">
-        <button class="option-btn" onclick="selectOption('opts2',this)">I clicked a link</button>
-        <button class="option-btn" onclick="selectOption('opts2',this)">I opened an attachment</button>
-        <button class="option-btn" onclick="selectOption('opts2',this)">I entered my username or password</button>
-        <button class="option-btn" onclick="selectOption('opts2',this)">I approved a payment or money transfer</button>
-        <button class="option-btn" onclick="selectOption('opts2',this)">I didn't click or open anything</button>
-      </div>
-      <div class="nav"><button class="btn-back" onclick="goToStep(1)">← Back</button><button class="btn-next" id="next2" onclick="goToStep(3)" disabled>Next →</button></div>
-    </div>
-
-    <div class="step" id="step3">
-      <div class="step-label">Step 3 of 4</div>
-      <h3>How long ago did this happen?</h3>
-      <div class="options" id="opts3">
-        <button class="option-btn" onclick="selectOption('opts3',this)">Just now (within the last 5 minutes)</button>
-        <button class="option-btn" onclick="selectOption('opts3',this)">Within the last hour</button>
-        <button class="option-btn" onclick="selectOption('opts3',this)">Earlier today</button>
-        <button class="option-btn" onclick="selectOption('opts3',this)">Yesterday or earlier</button>
-        <button class="option-btn" onclick="selectOption('opts3',this)">I'm not sure</button>
-      </div>
-      <div class="nav"><button class="btn-back" onclick="goToStep(2)">← Back</button><button class="btn-next" id="next3" onclick="goToStep(4)" disabled>Next →</button></div>
-    </div>
-
-    <div class="step" id="step4">
-      <div class="step-label">Step 4 of 4</div>
-      <h3>Anything else IT should know?</h3>
-      <div id="urgencyBadge"></div>
-      <textarea id="userNote" placeholder="Optional: describe anything else, or leave blank and hit Send."></textarea>
-      <div class="nav"><button class="btn-back" onclick="goToStep(3)">← Back</button><button class="btn-next" onclick="sendReport()">🚨 Send Report</button></div>
-      <div id="status"></div>
     </div>
   </div>
 
-  <footer>Mail Guard · Analyze &amp; Report · for Microsoft Outlook</footer>
+  <!-- Main content -->
+  <div id="main">
 
-  <script>
-    // ════════════════════════════════════════════════════════════════
-    // CONFIG
-    // ════════════════════════════════════════════════════════════════
-    const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-    const CACHE_PREFIX = 'emailSec_v1_';
-    const REPORT_TO    = 'support@mattnj.com';
+    <!-- Intake form -->
+    <div id="form-state">
+      <p class="hint-text">
+        Think this email is a phishing or scam message — or already clicked something you shouldn't have?
+        Answer a few quick questions and we'll build a report to <strong id="support-addr">IT support</strong>
+        with the full message details attached.
+      </p>
 
-    let captured = {};
-    let answers  = { reason:'', interaction:'', timing:'' };
-    let lastResults = [];
-    let lastRisk = 0;
+      <form id="report-form">
 
-    // ════════════════════════════════════════════════════════════════
-    // DATA (from Jeff's engine)
-    // ════════════════════════════════════════════════════════════════
-    const PHISH_KEYWORDS = ['verify your account','confirm your identity','unusual activity','suspended','click immediately','update your payment','wire transfer','act now','urgent action required','your account has been','limited time','validate your','sign in to restore','security alert','unauthorized access','click here to verify','reactivate your account','won a prize','claim your reward'];
-    const FREE_PROVIDERS = ['gmail.com','yahoo.com','hotmail.com','aol.com','icloud.com','protonmail.com','mail.com','yandex.com','gmx.com'];
-    const KNOWN_SAFE = ['gmail.com','yahoo.com','outlook.com','hotmail.com','icloud.com','microsoft.com','apple.com','amazon.com','google.com','live.com','office365.com','msn.com'];
-    const BRANDS = [
-      { brand:"microsoft", domains:["microsoft.com","outlook.com","office.com","live.com","microsoftonline.com"] },
-      { brand:"apple", domains:["apple.com","icloud.com","appleid.apple.com"] },
-      { brand:"amazon", domains:["amazon.com","amazonaws.com","amazon.co.uk","amazon.ca"] },
-      { brand:"google", domains:["google.com","gmail.com","googlemail.com","accounts.google.com"] },
-      { brand:"facebook", domains:["facebook.com","meta.com","fb.com","instagram.com"] },
-      { brand:"netflix", domains:["netflix.com"] },
-      { brand:"adobe", domains:["adobe.com","adobelogin.com"] },
-      { brand:"dropbox", domains:["dropbox.com","dropboxmail.com"] },
-      { brand:"linkedin", domains:["linkedin.com"] },
-      { brand:"twitter", domains:["twitter.com","x.com"] },
-      { brand:"zoom", domains:["zoom.us","zoom.com"] },
-      { brand:"docusign", domains:["docusign.com","docusign.net"] },
-      { brand:"paypal", domains:["paypal.com","paypal-corp.com"] },
-      { brand:"chase", domains:["chase.com","jpmchase.com","jpmorgan.com"] },
-      { brand:"bank of america", domains:["bankofamerica.com","bac.com"] },
-      { brand:"wells fargo", domains:["wellsfargo.com"] },
-      { brand:"citibank", domains:["citibank.com","citi.com"] },
-      { brand:"capital one", domains:["capitalone.com"] },
-      { brand:"american express", domains:["americanexpress.com","aexp.com"] },
-      { brand:"discover", domains:["discover.com","discovercard.com"] },
-      { brand:"venmo", domains:["venmo.com"] },
-      { brand:"coinbase", domains:["coinbase.com"] },
-      { brand:"stripe", domains:["stripe.com"] },
-      { brand:"square", domains:["squareup.com","square.com"] },
-      { brand:"irs", domains:["irs.gov"] },
-      { brand:"social security", domains:["ssa.gov"] },
-      { brand:"medicare", domains:["medicare.gov","cms.gov"] },
-      { brand:"usps", domains:["usps.com","usps.gov"] },
-      { brand:"fbi", domains:["fbi.gov"] },
-      { brand:"dhs", domains:["dhs.gov"] },
-      { brand:"fedex", domains:["fedex.com","fedex.net"] },
-      { brand:"ups", domains:["ups.com"] },
-      { brand:"dhl", domains:["dhl.com","dhl.de"] },
-      { brand:"at&t", domains:["att.com","attonline.com"] },
-      { brand:"verizon", domains:["verizon.com","verizonwireless.com"] },
-      { brand:"comcast", domains:["comcast.com","comcast.net","xfinity.com"] },
-      { brand:"walmart", domains:["walmart.com"] },
-      { brand:"target", domains:["target.com"] },
-      { brand:"ebay", domains:["ebay.com"] },
-      { brand:"bestbuy", domains:["bestbuy.com"] },
-    ];
-    const SUSPICIOUS_TLDS = ['gq','tk','ml','ga','cf','pw','xyz','top','click','loan','work','win','bid','download','stream','review','trade','science','party','date','faith','racing','accountant','cricket','webcam','men','country','kim','support','help','services','solutions','claims','refund'];
-    const LOOKALIKES = [
-      { real:"paypal.com", patterns:["paypa1","paypai","paypal-","paypalservice","pay-pal","paypol"] },
-      { real:"microsoft.com", patterns:["micros0ft","microsofft","microsoft-","rnicrosof","m1crosoft","mlcrosoft"] },
-      { real:"apple.com", patterns:["apple-","appie","apple-id","appleserv","aple.","appl3"] },
-      { real:"amazon.com", patterns:["arnazon","amaz0n","amazon-","amazonservice","amazom"] },
-      { real:"google.com", patterns:["go0gle","googie","google-","g00gle","gooogle","googl3"] },
-      { real:"netflix.com", patterns:["netfIix","netfix","netflix-","netfl1x","netfilx"] },
-      { real:"chase.com", patterns:["chase-","chas3","chasebank","chase-secure","chas3bank"] },
-      { real:"irs.gov", patterns:["irs-","irs.com","irsrefund","irs-gov","internal-revenue"] },
-      { real:"fedex.com", patterns:["fedex-","fe-dex","fedexp","fedexpress-"] },
-      { real:"bank of america", patterns:["bankofamerica-","bofa-","bankamerica","bank0famerica"] },
-      { real:"wells fargo", patterns:["wellsfargo-","wellfargo","wellsf4rgo","wllsfargo"] },
-      { real:"coinbase.com", patterns:["coinbase-","c0inbase","coinbas3","coinbasepro-"] },
-      { real:"docusign.com", patterns:["docusign-","d0cusign","docusigning","docu-sign"] },
-      { real:"linkedin.com", patterns:["linkedin-","linkedln","iinkedin","linked1n"] },
-      { real:"instagram.com", patterns:["instagram-","1nstagram","instgram","instagr4m"] },
-      { real:"facebook.com", patterns:["facebook-","faceb00k","facbook","facebok"] },
-      { real:"dropbox.com", patterns:["dropbox-","dr0pbox","dropb0x"] },
-      { real:"zoom.us", patterns:["zoom-","z0om","zoorn","zoom-meeting"] },
-      { real:"usps.com", patterns:["usps-","usps.org","us-ps","uspstracking"] },
-      { real:"ups.com", patterns:["ups-","upstracking","up5.com"] },
-      { real:"dhl.com", patterns:["dhl-","dhI.com","dh1.com"] },
-    ];
+        <fieldset class="q">
+          <legend>Did you click a link in this email?</legend>
+          <label><input type="radio" name="clicked" value="Yes"/> Yes</label>
+          <label><input type="radio" name="clicked" value="No"/> No</label>
+          <label><input type="radio" name="clicked" value="Not sure" checked/> Not sure</label>
+        </fieldset>
 
-    // ════════════════════════════════════════════════════════════════
-    // OFFICE INIT — capture everything once
-    // ════════════════════════════════════════════════════════════════
-    Office.onReady(function() {
-      const item = Office.context.mailbox.item;
-      const sender = item.from ? item.from.emailAddress : "Unknown";
-      const senderName = item.from ? item.from.displayName : "Unknown";
-      const subject = item.subject || "(no subject)";
-      const receivedTime = item.dateTimeCreated ? item.dateTimeCreated.toLocaleString() : "Unknown";
-      const reporterEmail = Office.context.mailbox.userProfile.emailAddress || "Unknown";
-      const reporterName = Office.context.mailbox.userProfile.displayName || "Unknown";
-      const replyTo = item.replyTo || [];
-      const replyToEmail = replyTo.length > 0 ? (replyTo[0].emailAddress || "").toLowerCase() : null;
+        <fieldset class="q">
+          <legend>Did you enter a password, login, or personal/financial details?</legend>
+          <label><input type="radio" name="credentials" value="Yes"/> Yes</label>
+          <label><input type="radio" name="credentials" value="No"/> No</label>
+          <label><input type="radio" name="credentials" value="Not sure" checked/> Not sure</label>
+        </fieldset>
 
-      item.getAllInternetHeadersAsync(function(hr) {
-        const headers = (hr.status === Office.AsyncResultStatus.Succeeded) ? hr.value : "";
-        item.body.getAsync(Office.CoercionType.Text, function(br) {
-          const bodyText = (br.status === Office.AsyncResultStatus.Succeeded) ? br.value : "";
+        <fieldset class="q">
+          <legend>Did you open or download an attachment?</legend>
+          <label><input type="radio" name="attachment" value="Yes"/> Yes</label>
+          <label><input type="radio" name="attachment" value="No"/> No</label>
+          <label><input type="radio" name="attachment" value="Not sure" checked/> Not sure</label>
+        </fieldset>
 
-          // Also grab the HTML body — needed to compare link display text vs real href
-          item.body.getAsync(Office.CoercionType.Html, function(hb) {
-            const bodyHtml = (hb.status === Office.AsyncResultStatus.Succeeded) ? hb.value : "";
+        <fieldset class="q">
+          <legend>Did you reply, forward, or send any information back?</legend>
+          <label><input type="radio" name="replied" value="Yes"/> Yes</label>
+          <label><input type="radio" name="replied" value="No"/> No</label>
+          <label><input type="radio" name="replied" value="Not sure" checked/> Not sure</label>
+        </fieldset>
 
-            const urlMatches = bodyText.match(/https?:\/\/[^\s"'<>]+/g) || [];
-            const decoded = [...new Set(urlMatches)].map(decodeSafelink);
-            const uniqueUrls = [...new Set(decoded)];
+        <fieldset class="q">
+          <legend>When did this happen?</legend>
+          <select id="when-select" name="when">
+            <option value="Just now">Just now</option>
+            <option value="Earlier today" selected>Earlier today</option>
+            <option value="This week">This week</option>
+            <option value="Longer ago">Longer ago</option>
+            <option value="Not sure">Not sure</option>
+          </select>
+        </fieldset>
 
-            const attachments = item.attachments || [];
-            const attachNames = attachments.map(a => a.name + " (" + (a.size ? Math.round(a.size/1024)+" KB" : "size unknown") + ")");
-            const attachDisplay = attachNames.length ? attachNames.join(", ") : "None";
+        <fieldset class="q">
+          <legend>Anything else IT should know? <span class="optional">(optional)</span></legend>
+          <textarea id="notes" name="notes" rows="3" maxlength="2000"
+            placeholder="e.g. I entered my password on the page it opened, then it asked for a code."></textarea>
+        </fieldset>
 
-            captured = {
-              sender, senderName, subject, receivedTime, headers, bodyText, bodyHtml,
-              urls: uniqueUrls, attachments: attachNames, attachDisplay,
-              reporterEmail, reporterName, replyToEmail,
-              senderDomain: (sender.split("@")[1] || "").toLowerCase(),
-              reportedAt: new Date().toLocaleString()
-            };
+        <button id="submit-btn" type="submit" class="btn btn-primary btn-full">
+          🚩 Create report to IT
+        </button>
+      </form>
 
-            document.getElementById("info-sender").textContent = senderName + " <" + sender + ">";
-            document.getElementById("info-domain").textContent = captured.senderDomain || "Unknown";
-            document.getElementById("info-subject").textContent = subject;
-            document.getElementById("info-links").textContent = uniqueUrls.length ? uniqueUrls.length + " URL(s)" : "None";
-            document.getElementById("info-attach").textContent = attachDisplay;
-          });
-        });
-      });
-    });
+      <p class="privacy-note">
+        This opens a pre-filled email to your IT support team. Nothing is sent until you review it and click
+        <strong>Send</strong>. Message content stays inside your organization — it is not sent to any outside service.
+      </p>
+    </div>
 
-    // ════════════════════════════════════════════════════════════════
-    // SAFELINK DECODER (from your add-in)
-    // ════════════════════════════════════════════════════════════════
-    function decodeSafelink(url) {
-      try {
-        if (url.indexOf('safelinks.protection.outlook.com') !== -1) {
-          const m = url.match(/[?&]url=([^&]+)/);
-          if (m) return decodeURIComponent(m[1]);
-        }
-        return url;
-      } catch(e) { return url; }
-    }
+    <!-- Loading state -->
+    <div id="loading-state" class="hidden">
+      <div class="spinner-wrap"><div class="spinner"></div></div>
+      <div id="loading-message" class="loading-text">Building your report…</div>
+      <div class="loading-sub">Capturing headers and message details</div>
+    </div>
 
-    // ════════════════════════════════════════════════════════════════
-    // CACHE (from Jeff's engine)
-    // ════════════════════════════════════════════════════════════════
-    function getCache(domain) {
-      try {
-        const raw = localStorage.getItem(CACHE_PREFIX + domain);
-        if (!raw) return null;
-        const e = JSON.parse(raw);
-        if (Date.now() - e.ts > CACHE_TTL_MS) { localStorage.removeItem(CACHE_PREFIX + domain); return null; }
-        return e;
-      } catch(_) { return null; }
-    }
-    function setCache(domain, data) {
-      try { localStorage.setItem(CACHE_PREFIX + domain, JSON.stringify(data)); } catch(_) {}
-    }
+    <!-- Done state -->
+    <div id="done-state" class="hidden">
+      <div class="done-icon">✅</div>
+      <div class="done-title">Report ready</div>
+      <p id="done-message" class="hint-text">
+        A pre-filled report has opened in a new email window. Review it and click
+        <strong>Send</strong> to submit it to IT.
+      </p>
+      <div id="done-fallback" class="notice warning hidden"></div>
+      <button id="another-btn" class="btn btn-ghost btn-full" style="margin-top:8px;">↩ Report another</button>
+    </div>
 
-    // ════════════════════════════════════════════════════════════════
-    // RUN ANALYSIS — all checks in parallel
-    // ════════════════════════════════════════════════════════════════
-    async function runSafetyCheck() {
-      const btn = document.getElementById("its-btn");
-      btn.disabled = true; btn.textContent = "⏳ Analyzing…";
-      document.getElementById("safety-loading").style.display = "block";
-      document.getElementById("safety-section").style.display = "none";
-      document.getElementById("alert-line").style.display = "none";
-      document.getElementById("report-btn").style.display = "none";
+    <!-- Error state -->
+    <div id="error-state" class="hidden">
+      <div class="error-icon">⚠️</div>
+      <div id="error-message" class="error-text"></div>
+      <button id="retry-btn" class="btn btn-primary btn-full" style="margin-top:12px;">Try Again</button>
+    </div>
 
-      try {
-        setSafetyStatus("Checking domain age…");
-        const [ageResult, ...instant] = await Promise.all([
-          checkDomainAge(captured.senderDomain),
-          Promise.resolve(checkAuth(captured.headers)),
-          Promise.resolve(checkDisplayName(captured.senderName, captured.sender, captured.senderDomain)),
-          Promise.resolve(checkFreeProvider(captured.senderDomain, captured.senderName)),
-          Promise.resolve(checkReplyTo(captured.sender.toLowerCase(), captured.replyToEmail)),
-          Promise.resolve(checkContent(captured.bodyText, captured.subject)),
-          Promise.resolve(checkLookalike(captured.senderDomain)),
-          Promise.resolve(checkHomoglyphs(captured.senderDomain)),
-          Promise.resolve(checkNumberSubstitution(captured.senderDomain)),
-          Promise.resolve(checkFreeSubdomain(captured.senderDomain)),
-          Promise.resolve(checkUrls(captured.urls)),
-          Promise.resolve(checkLinkMismatch(captured.bodyHtml)),
-        ]);
-        setSafetyStatus("");
-        renderSafetyResults([ageResult, ...instant]);
-      } catch(err) {
-        document.getElementById("safety-loading").style.display = "none";
-        btn.disabled = false; btn.textContent = "🔍 Is This Safe? — Run Full Analysis";
-      }
-    }
+  </div>
 
-    // ── CHECK: Domain age (Jeff's RDAP engine) ──
-    async function checkDomainAge(domain) {
-      if (!domain) return { name:"Domain Age", icon:"❓", status:"info", badge:"UNKNOWN", desc:"No sender domain to check.", weight:0 };
-      if (KNOWN_SAFE.includes(domain)) return { name:"Domain Age", icon:"✅", status:"pass", badge:"ESTABLISHED", desc:domain+" is a well-known established provider.", weight:0 };
+  <!-- Footer -->
+  <div id="footer">
+    <span id="footer-status"></span>
+  </div>
 
-      const cached = getCache(domain);
-      if (cached && cached.createdDate) return buildAge(domain, new Date(cached.createdDate));
-
-      try {
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 3000);
-        const res = await fetch("https://rdap.org/domain/" + domain, { signal: ctrl.signal });
-        clearTimeout(timer);
-        if (res.ok) {
-          const d = await res.json();
-          const ev = (d.events || []).find(e => e.eventAction === "registration");
-          if (ev) {
-            const date = new Date(ev.eventDate);
-            setCache(domain, { createdDate: date.toISOString(), ts: Date.now() });
-            return buildAge(domain, date);
-          }
-        }
-      } catch(_) {}
-      setCache(domain, { createdDate: null, ts: Date.now() });
-      return { name:"Domain Age", icon:"❓", status:"info", badge:"UNKNOWN", desc:"Could not retrieve registration date — privacy-protected or unavailable.", weight:0 };
-    }
-    function buildAge(domain, date) {
-      const days = Math.floor((Date.now() - date.getTime())/86400000);
-      const months = Math.floor(days/30);
-      const years = (days/365).toFixed(1);
-      const reg = date.toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});
-      if (days <= 7) return { name:"Domain Age", icon:"🚨", status:"fail", badge:"CRITICAL", desc:`Registered only ${days} day(s) ago (${reg}). Extremely high phishing risk.`, weight:40 };
-      if (days <= 30) return { name:"Domain Age", icon:"⛔", status:"fail", badge:"HIGH RISK", desc:`Registered ${days} days ago (${reg}). Very recently created domain.`, weight:35 };
-      if (days <= 90) return { name:"Domain Age", icon:"⚠️", status:"warn", badge:"ELEVATED", desc:`Registered ${months} month(s) ago (${reg}). Recently created domain.`, weight:20 };
-      if (days <= 365) return { name:"Domain Age", icon:"⚠️", status:"warn", badge:"NOTICE", desc:`Domain is ${months} months old (${reg}).`, weight:10 };
-      return { name:"Domain Age", icon:"✅", status:"pass", badge:"ESTABLISHED", desc:`Domain registered ${years} years ago (${reg}). No age-based red flags.`, weight:0 };
-    }
-
-    // ── CHECK: SPF/DKIM/DMARC auth (YOUR addition — Jeff's engine lacked this) ──
-    function checkAuth(headers) {
-      const h = (headers || "").toLowerCase();
-      if (!h) return { name:"Authentication", icon:"❓", status:"info", badge:"NO HEADERS", desc:"Internet headers unavailable to verify SPF/DKIM/DMARC.", weight:0 };
-      const fails = [];
-      let weight = 0;
-      if (h.indexOf('spf=fail') !== -1) { fails.push("SPF"); weight += 35; }
-      else if (h.indexOf('spf=softfail') !== -1) { fails.push("SPF(soft)"); weight += 8; }
-      if (h.indexOf('dmarc=fail') !== -1) { fails.push("DMARC"); weight += 30; }
-      if (h.indexOf('dkim=fail') !== -1) { fails.push("DKIM"); weight += 20; }
-      if (fails.length === 0) {
-        const passes = (h.indexOf('spf=pass')!==-1) || (h.indexOf('dmarc=pass')!==-1) || (h.indexOf('dkim=pass')!==-1);
-        return { name:"Authentication", icon: passes?"✅":"❓", status: passes?"pass":"info", badge: passes?"PASS":"UNKNOWN",
-          desc: passes ? "SPF/DKIM/DMARC checks passed — sender is authenticated." : "No authentication results found in headers.", weight:0 };
-      }
-      const hardFail = fails.some(f => f === "SPF" || f === "DMARC");
-      return { name:"Authentication", icon: hardFail?"🚨":"⚠️", status: hardFail?"fail":"warn", badge: fails.join(" + ")+" FAIL",
-        desc:`Email authentication failed (${fails.join(", ")}). Strong indicator the sender may be spoofed.`, weight };
-    }
-
-    // ── CHECK: Display name brand impersonation (Jeff's) ──
-    function checkDisplayName(name, email, domain) {
-      if (!name) return { name:"Sender Identity", icon:"✅", status:"pass", badge:"OK", desc:"No display name spoofing detected.", weight:0 };
-      const nl = name.toLowerCase();
-      for (const { brand, domains } of BRANDS) {
-        if (nl.includes(brand)) {
-          const match = domains.some(d => domain === d || domain.endsWith("."+d));
-          if (!match) return { name:"Sender Identity", icon:"🚨", status:"fail", badge:"SPOOFED NAME", desc:`Display name contains "${brand}" but email is from ${domain}. Classic impersonation tactic.`, weight:35 };
-        }
-      }
-      const emailInName = nl.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/);
-      if (emailInName && emailInName[0] !== email) return { name:"Sender Identity", icon:"⚠️", status:"warn", badge:"NAME MISMATCH", desc:"Display name contains a different email address than the actual sender.", weight:20 };
-      return { name:"Sender Identity", icon:"✅", status:"pass", badge:"OK", desc:`Display name "${name}" shows no brand impersonation.`, weight:0 };
-    }
-
-    // ── CHECK: Free provider (Jeff's) ──
-    function checkFreeProvider(domain, name) {
-      if (!FREE_PROVIDERS.includes(domain)) return { name:"Email Provider", icon:"✅", status:"pass", badge:"BUSINESS DOMAIN", desc:domain+" is a dedicated business domain.", weight:0 };
-      const corp = ["support","help","admin","billing","service","security","team","noreply","no-reply","info","account","alert","bank"];
-      if (corp.some(t => (name||"").toLowerCase().includes(t))) return { name:"Email Provider", icon:"⚠️", status:"warn", badge:"FREE PROVIDER", desc:`Appears official but sent from free provider ${domain}. Legitimate businesses use their own domains.`, weight:15 };
-      return { name:"Email Provider", icon:"⚠️", status:"warn", badge:"FREE EMAIL", desc:`Sent from ${domain} — a free consumer email provider. Verify before acting.`, weight:5 };
-    }
-
-    // ── CHECK: Reply-to (Jeff's) ──
-    function checkReplyTo(senderEmail, replyToEmail) {
-      if (!replyToEmail || replyToEmail === senderEmail) return { name:"Reply-To Address", icon:"✅", status:"pass", badge:"MATCHES", desc:"Reply-to matches sender — no redirection detected.", weight:0 };
-      const sd = senderEmail.split("@")[1], rd = replyToEmail.split("@")[1];
-      if (rd !== sd) return { name:"Reply-To Address", icon:"🚨", status:"fail", badge:"MISMATCH", desc:`Replies go to ${replyToEmail} — a different domain. Classic phishing technique to intercept responses.`, weight:30 };
-      return { name:"Reply-To Address", icon:"⚠️", status:"warn", badge:"DIFFERENT", desc:"Reply-to differs from sender but uses same domain.", weight:5 };
-    }
-
-    // ── CHECK: Content keywords (merged: Jeff's subject + your body credential/payment) ──
-    function checkContent(bodyText, subject) {
-      const text = ((subject||"") + " " + (bodyText||"")).toLowerCase();
-      let weight = 0; const hits = [];
-      // Credential harvesting (your addition)
-      const cred = ['enter your password','confirm your password','verify your password','reset your password','update your password','enter your credentials','sign in to verify','log in to confirm','your password has expired'];
-      if (cred.some(p => text.indexOf(p) !== -1)) { weight += 40; hits.push("credential request"); }
-      // Payment (your addition)
-      const pay = ['wire transfer','bank transfer','gift card','western union','money gram','bitcoin','crypto','urgent payment','invoice attached','payment overdue','remit payment','ach transfer'];
-      if (pay.some(p => text.indexOf(p) !== -1)) { weight += 35; hits.push("payment request"); }
-      // Phishing phrases (Jeff's list)
-      const phishHits = PHISH_KEYWORDS.filter(k => text.indexOf(k) !== -1);
-      if (phishHits.length >= 2) { weight += 15; hits.push(phishHits.length+" phishing phrases"); }
-      else if (phishHits.length === 1) { weight += 8; hits.push('phrase "'+phishHits[0]+'"'); }
-
-      if (weight >= 40) return { name:"Content Analysis", icon:"🚨", status:"fail", badge:"HIGH RISK", desc:"Dangerous content detected: "+hits.join(", ")+". Legitimate services never request passwords or payment this way.", weight };
-      if (weight >= 15) return { name:"Content Analysis", icon:"⚠️", status:"warn", badge:"SUSPICIOUS", desc:"Suspicious content: "+hits.join(", ")+".", weight };
-      if (weight > 0) return { name:"Content Analysis", icon:"⚠️", status:"warn", badge:"CAUTION", desc:"Minor content signal: "+hits.join(", ")+".", weight };
-      return { name:"Content Analysis", icon:"✅", status:"pass", badge:"CLEAR", desc:"No suspicious language detected in subject or body.", weight:0 };
-    }
-
-    // ── CHECK: Lookalike/typosquat (Jeff's) ──
-    function checkLookalike(domain) {
-      for (const { real, patterns } of LOOKALIKES) {
-        if (patterns.some(p => domain.includes(p))) return { name:"Domain Spoofing", icon:"🚨", status:"fail", badge:"LOOKALIKE", desc:`"${domain}" appears to be impersonating ${real}. Typosquatting attack.`, weight:40 };
-      }
-      const hyphens = (domain.match(/-/g)||[]).length;
-      const tld = domain.split(".").pop();
-      if (hyphens >= 3) return { name:"Domain Spoofing", icon:"⚠️", status:"warn", badge:"SUSPICIOUS", desc:`"${domain}" has an unusual number of hyphens — common in phishing domains.`, weight:15 };
-      if (SUSPICIOUS_TLDS.includes(tld)) return { name:"Domain Spoofing", icon:"⚠️", status:"warn", badge:"RISKY TLD", desc:`.${tld} domains are frequently used in phishing campaigns.`, weight:12 };
-      return { name:"Domain Spoofing", icon:"✅", status:"pass", badge:"LOOKS CLEAN", desc:"No lookalike or typosquat patterns detected.", weight:0 };
-    }
-
-    // ── CHECK: Homoglyphs (Jeff's) ──
-    function checkHomoglyphs(domain) {
-      const homoglyphs = {
-        'a':['а','ä','á','à','â','ã','å','ą','α'],'e':['е','ë','é','è','ê','ę','ε'],'o':['о','ö','ó','ò','ô','õ','ø','ο','σ'],
-        'p':['р','ρ'],'c':['с','ç','ć'],'x':['х','χ'],'i':['і','ï','í','ì','î','ı'],'n':['η','ñ','ń'],
-        'u':['υ','ü','ú','ù','û','ų'],'y':['у','ý','ÿ'],'k':['κ'],'v':['ν'],'w':['ω'],'b':['б','β'],
-        'd':['ď','δ'],'g':['ġ','γ'],'h':['η'],'l':['І','ӏ','ι','ℓ'],'s':['ѕ','ş','ś'],'t':['τ','ţ']
-      };
-      const dl = domain.toLowerCase();
-      if (!/^[a-z0-9.-]+$/.test(dl)) {
-        const nonAscii = [...dl].filter(c => !/[a-z0-9.\-]/.test(c));
-        return { name:"Unicode Spoofing", icon:"🚨", status:"fail", badge:"HOMOGLYPH", desc:`Domain contains non-ASCII characters: "${nonAscii.join('')}" — designed to look like a real domain while being completely different.`, weight:45 };
-      }
-      const dn = dl.split('.').slice(0,-1).join('.');
-      const found = [];
-      for (const [ascii, variants] of Object.entries(homoglyphs)) for (const v of variants) if (dn.includes(v)) found.push(`"${v}" (looks like "${ascii}")`);
-      if (found.length) return { name:"Unicode Spoofing", icon:"🚨", status:"fail", badge:"HOMOGLYPH", desc:"Domain uses look-alike characters: "+found.join(', ')+". Sophisticated spoofing attack.", weight:45 };
-      return { name:"Unicode Spoofing", icon:"✅", status:"pass", badge:"CLEAN", desc:"No Unicode homoglyph substitutions detected in domain.", weight:0 };
-    }
-
-    // ── CHECK: Number substitution (Jeff's) ──
-    function checkNumberSubstitution(domain) {
-      const dn = domain.split('.').slice(0,-1).join('.');
-      if (!/[a-z]/i.test(dn) || !/[0-9]/.test(dn)) return { name:"Number Substitution", icon:"✅", status:"pass", badge:"CLEAN", desc:"No suspicious number/letter substitutions detected.", weight:0 };
-      const decoded = dn.replace(/0/g,'o').replace(/1/g,'l').replace(/3/g,'e').replace(/4/g,'a').replace(/5/g,'s').replace(/8/g,'b');
-      const brands = ['paypal','microsoft','apple','amazon','google','netflix','facebook','instagram','linkedin','dropbox','coinbase','docusign','wellsfargo','bankofamerica','chase','citibank','americanexpress'];
-      const m = brands.find(b => decoded.includes(b));
-      if (m && decoded !== dn) return { name:"Number Substitution", icon:"🚨", status:"fail", badge:"SUBSTITUTION", desc:`Domain "${domain}" uses number substitutions that disguise "${m}". Classic obfuscation technique.`, weight:38 };
-      return { name:"Number Substitution", icon:"✅", status:"pass", badge:"CLEAN", desc:"No brand-targeting number substitutions detected.", weight:0 };
-    }
-
-    // ── CHECK: Free subdomain hosting (Jeff's) ──
-    function checkFreeSubdomain(domain) {
-      const platforms = ['blogspot.com','wordpress.com','wix.com','weebly.com','squarespace.com','typepad.com','tumblr.com','github.io','gitlab.io','netlify.app','vercel.app','web.app','firebaseapp.com','azurewebsites.net','herokuapp.com','repl.co','glitch.me','pages.dev','onrender.com','000webhostapp.com','byethost','infinityfree','awardspace','sites.google.com','notion.site','crd.co','carrd.co'];
-      const dl = domain.toLowerCase();
-      const m = platforms.find(p => dl.endsWith('.'+p) || dl === p);
-      if (m) {
-        const sub = dl.replace('.'+m,'');
-        const official = ['paypal','microsoft','apple','amazon','google','bank','secure','login','verify','account','support','billing','update','confirm','alert','service','official'].some(w => sub.includes(w));
-        if (official) return { name:"Hosted Platform", icon:"🚨", status:"fail", badge:"FREE SUBDOMAIN", desc:`"${domain}" is a free hosted page on ${m} with an official-sounding name. Legitimate companies don't use free hosting for business email.`, weight:40 };
-        return { name:"Hosted Platform", icon:"⚠️", status:"warn", badge:"FREE HOST", desc:`Sender is using a free hosting platform (${m}). Verify this is expected.`, weight:10 };
-      }
-      return { name:"Hosted Platform", icon:"✅", status:"pass", badge:"CLEAN", desc:"Domain is not using a free subdomain hosting platform.", weight:0 };
-    }
-
-    // ── CHECK: URLs in body (merged — your URL extraction + Jeff's suspicious-domain logic) ──
-    function checkUrls(urls) {
-      if (!urls || !urls.length) return { name:"Links", icon:"✅", status:"pass", badge:"NONE", desc:"No links found in email body.", weight:0 };
-      const suspicious = [];
-      const ipLinks = urls.filter(u => /https?:\/\/\d+\.\d+\.\d+\.\d+/.test(u));
-      const shorteners = ['bit.ly','tinyurl.com','t.co','ow.ly','goo.gl','short.io','rebrand.ly','cutt.ly','is.gd','buff.ly'];
-      const shortened = urls.filter(u => shorteners.some(s => u.indexOf(s) !== -1));
-      let weight = 0;
-      if (ipLinks.length) { weight += 35; suspicious.push("raw IP address link"); }
-      if (shortened.length) { weight += 15; suspicious.push("URL shortener"); }
-      for (const u of urls) {
-        try {
-          const host = u.replace(/https?:\/\//,'').split('/')[0].toLowerCase();
-          const tld = host.split('.').pop();
-          if (SUSPICIOUS_TLDS.includes(tld)) { weight += 12; suspicious.push("risky TLD ."+tld); break; }
-          if (LOOKALIKES.some(l => l.patterns.some(p => host.includes(p)))) { weight += 30; suspicious.push("lookalike link domain"); break; }
-        } catch(_) {}
-      }
-      if (weight >= 30) return { name:"Links", icon:"🚨", status:"fail", badge:"SUSPICIOUS", desc:"Dangerous links: "+suspicious.join(", ")+".", weight };
-      if (weight > 0) return { name:"Links", icon:"⚠️", status:"warn", badge:"CAUTION", desc:"Link concerns: "+suspicious.join(", ")+".", weight };
-      return { name:"Links", icon:"✅", status:"pass", badge:"CLEAN", desc:`Found ${urls.length} link(s) — no suspicious domains detected.`, weight:0 };
-    }
-
-    // ── CHECK: Link display text vs real destination (the smoking-gun check) ──
-    // Pulls registrable domain from a string ("login.microsoft.com/x" -> "microsoft.com")
-    function regDomain(host) {
-      if (!host) return "";
-      host = host.toLowerCase().replace(/^https?:\/\//,'').split('/')[0].split('?')[0].split(':')[0];
-      const parts = host.split('.').filter(Boolean);
-      if (parts.length <= 2) return parts.join('.');
-      // small allowance for common 2-part TLDs so co.uk etc. aren't mis-split
-      const twoPartTlds = ['co.uk','org.uk','gov.uk','ac.uk','com.au','net.au','org.au','co.nz','co.jp','com.br','co.za'];
-      const lastTwo = parts.slice(-2).join('.');
-      if (twoPartTlds.includes(lastTwo)) return parts.slice(-3).join('.');
-      return parts.slice(-2).join('.');
-    }
-    // Find a domain inside the visible anchor text, if the text is itself a URL/domain
-    function domainInText(text) {
-      if (!text) return "";
-      const t = text.trim();
-      // explicit URL in the text
-      const urlMatch = t.match(/https?:\/\/([^\s/?#"'<>]+)/i);
-      if (urlMatch) return regDomain(urlMatch[1]);
-      // bare domain shown as text (e.g. "www.paypal.com") — require a plausible TLD
-      const bare = t.match(/^(?:www\.)?((?:[a-z0-9-]+\.)+[a-z]{2,})$/i);
-      if (bare) return regDomain(bare[1]);
-      return "";
-    }
-
-    function checkLinkMismatch(bodyHtml) {
-      if (!bodyHtml) return { name:"Link Honesty", icon:"❓", status:"info", badge:"NO HTML", desc:"Could not read the HTML body to compare link text against destinations.", weight:0 };
-
-      let anchors = [];
-      try {
-        const doc = new DOMParser().parseFromString(bodyHtml, "text/html"); // does not execute scripts
-        anchors = Array.from(doc.querySelectorAll('a[href]'));
-      } catch(_) {
-        return { name:"Link Honesty", icon:"❓", status:"info", badge:"PARSE FAILED", desc:"Could not parse the email's links.", weight:0 };
-      }
-
-      const mismatches = [];
-      for (const a of anchors) {
-        const rawHref = a.getAttribute('href') || "";
-        if (!/^https?:/i.test(rawHref)) continue;            // skip mailto:, tel:, anchors
-        const realHref = decodeSafelink(rawHref);            // CRITICAL: unwrap safelinks first
-        const realDomain = regDomain(realHref);
-        const textDomain = domainInText(a.textContent || ""); // only meaningful if the text is itself a domain
-
-        if (!textDomain || !realDomain) continue;            // text isn't a domain → normal link, ignore
-        // same registrable domain (covers subdomains) → not a mismatch
-        if (textDomain === realDomain) continue;
-        if (realDomain.endsWith('.'+textDomain) || textDomain.endsWith('.'+realDomain)) continue;
-
-        mismatches.push({ shown: textDomain, goesTo: realDomain });
-      }
-
-      if (mismatches.length === 0) {
-        return { name:"Link Honesty", icon:"✅", status:"pass", badge:"HONEST", desc:"All links go where their text says — no disguised destinations found.", weight:0 };
-      }
-
-      const first = mismatches[0];
-      const more = mismatches.length > 1 ? ` (and ${mismatches.length - 1} more)` : "";
-      return {
-        name:"Link Honesty", icon:"🚨", status:"fail", badge:"DISGUISED LINK",
-        desc:`A link displays "${first.shown}" but actually goes to "${first.goesTo}"${more}. This is a classic phishing tactic — the visible text is fake.`,
-        weight:40
-      };
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    // RENDER RESULTS
-    // ════════════════════════════════════════════════════════════════
-    function renderSafetyResults(results) {
-      lastResults = results;
-      document.getElementById("safety-loading").style.display = "none";
-      document.getElementById("safety-section").style.display = "block";
-      const btn = document.getElementById("its-btn");
-      btn.disabled = false; btn.textContent = "↺ Re-run Analysis";
-
-      const risk = Math.min(100, results.reduce((s,r) => s + (r.weight||0), 0));
-      lastRisk = risk;
-      const safe = Math.max(0, 100 - risk);
-      const failCount = results.filter(r => r.status==="fail").length;
-      const warnCount = results.filter(r => r.status==="warn").length;
-
-      let bannerClass, prefixText, reasonText, barColor;
-      if (risk >= 60 || failCount >= 2) {
-        bannerClass="critical"; barColor="#ff2d55"; prefixText="🚨 ALERT —";
-        const top = results.filter(r=>r.status==="fail").slice(0,2).map(r=>r.name).join(" & ");
-        reasonText = `${top} flagged as high risk. Do not click links or reply without verifying.`;
-      } else if (risk >= 35 || failCount >= 1) {
-        bannerClass="danger"; barColor="#ef4444"; prefixText="⛔ ALERT —";
-        const top = results.filter(r=>r.status==="fail")[0];
-        reasonText = top ? `${top.name}: ${top.desc}` : "Significant concern detected.";
-      } else if (risk >= 15 || warnCount >= 2) {
-        bannerClass="warn"; barColor="#f59e0b"; prefixText="⚠️ CAUTION —";
-        const top = results.filter(r=>r.status==="warn").slice(0,2).map(r=>r.name).join(" & ");
-        reasonText = `${top} raised concerns. Verify before responding.`;
-      } else if (risk >= 5 || warnCount >= 1) {
-        bannerClass="warn"; barColor="#f59e0b"; prefixText="⚠️ NOTICE —";
-        const top = results.filter(r=>r.status==="warn")[0];
-        reasonText = top ? `${top.name}: ${top.desc}` : "Minor concern noted.";
-      } else {
-        bannerClass="safe"; barColor="#22c55e"; prefixText="✅ CLEAR —";
-        reasonText = "No red flags detected. This email passes all safety checks.";
-      }
-
-      const alertLine = document.getElementById("alert-line");
-      alertLine.className = bannerClass; alertLine.style.display = "block";
-      document.getElementById("alert-prefix").textContent = prefixText;
-      document.getElementById("alert-reason").textContent = reasonText;
-
-      document.getElementById("score-num").textContent = `${safe}/100`;
-      const fill = document.getElementById("score-fill");
-      fill.style.width = `${safe}%`; fill.style.background = barColor;
-
-      const order = {fail:0,warn:1,info:2,pass:3};
-      const sorted = [...results].sort((a,b) => (order[a.status]||3)-(order[b.status]||3));
-      const container = document.getElementById("checks-container");
-      container.innerHTML = "";
-      const bm = {pass:"badge-pass",warn:"badge-warn",fail:"badge-fail",info:"badge-info"};
-      for (const c of sorted) {
-        const el = document.createElement("div");
-        el.className = `check-card ${c.status}`;
-        el.innerHTML = `<span class="check-icon">${c.icon}</span><div class="check-body"><div class="check-name">${esc(c.name)}</div><div class="check-desc">${esc(c.desc)}</div></div><span class="chk-badge ${bm[c.status]||'badge-info'}">${esc(c.badge)}</span>`;
-        container.appendChild(el);
-      }
-
-      // Show Report button unless the email is clearly clean
-      if (bannerClass !== "safe") document.getElementById("report-btn").style.display = "block";
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    // QUESTIONNAIRE + REPORT (from your add-in)
-    // ════════════════════════════════════════════════════════════════
-    function showQuestionnaire() {
-      document.getElementById("report-btn").style.display = "none";
-      document.getElementById("questionnaire").style.display = "block";
-    }
-    function selectOption(groupId, btn) {
-      document.getElementById(groupId).querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
-      const n = groupId.replace('opts','');
-      const nb = document.getElementById('next'+n);
-      if (nb) nb.disabled = false;
-      if (groupId==='opts1') answers.reason = btn.textContent;
-      if (groupId==='opts2') answers.interaction = btn.textContent;
-      if (groupId==='opts3') answers.timing = btn.textContent;
-    }
-    function goToStep(num) {
-      document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
-      document.getElementById('step'+num).classList.add('active');
-      for (let i=0;i<4;i++) document.getElementById('dot'+i).classList.toggle('done', i<num);
-      if (num===4) showUrgencyBadge();
-    }
-    function getUrgency() {
-      const i = answers.interaction.toLowerCase();
-      if (i.indexOf('password')!==-1 || i.indexOf('credentials')!==-1 || i.indexOf('payment')!==-1 || i.indexOf('transfer')!==-1) return { level:'CRITICAL', emoji:'🔴', cls:'urgency-critical' };
-      if (i.indexOf('link')!==-1 || i.indexOf('attachment')!==-1) return { level:'HIGH', emoji:'🟠', cls:'urgency-high' };
-      return { level:'LOW', emoji:'🟡', cls:'urgency-low' };
-    }
-    function showUrgencyBadge() {
-      const u = getUrgency();
-      document.getElementById('urgencyBadge').innerHTML = `<span class="urgency-badge ${u.cls}">${u.emoji} ${u.level} PRIORITY</span>`;
-    }
-    function sendReport() {
-      const status = document.getElementById("status");
-      const userNote = document.getElementById("userNote").value || "No additional details provided.";
-      const urgency = getUrgency();
-      const urlList = captured.urls && captured.urls.length ? captured.urls.join("\n  - ") : "None detected";
-      const flagsSummary = lastResults.length
-        ? lastResults.filter(r => r.status==="fail" || r.status==="warn").map(r => `[${r.status.toUpperCase()}] ${r.name}: ${r.desc}`).join("\n") || "No flags raised"
-        : "Analysis not run";
-
-      const body = [
-        "=== SUSPICIOUS EMAIL REPORT ===",
-        "Generated by the Email Security add-in.",
-        "Do not reply — follow up directly with the user.",
-        "",
-        "--- URGENCY ---",
-        urgency.emoji + " " + urgency.level + " PRIORITY",
-        "",
-        "--- AUTOMATED RISK SCORE ---",
-        "Risk: " + lastRisk + "/100",
-        "",
-        "--- REPORTED BY ---",
-        "Name:     " + captured.reporterName,
-        "Email:    " + captured.reporterEmail,
-        "Reported: " + captured.reportedAt,
-        "",
-        "--- EMAIL DETAILS ---",
-        "SENDER:      " + captured.senderName + " <" + captured.sender + ">",
-        "SUBJECT:     " + captured.subject,
-        "RECEIVED:    " + captured.receivedTime,
-        "ATTACHMENTS: " + captured.attachDisplay,
-        "",
-        "--- AUTOMATED FLAGS ---",
-        flagsSummary,
-        "",
-        "--- USER QUESTIONNAIRE ---",
-        "Why suspicious: " + answers.reason,
-        "Interaction:    " + answers.interaction,
-        "Time ago:       " + answers.timing,
-        "",
-        "Additional details:",
-        userNote,
-        "",
-        "--- LINKS FOUND (decoded) ---",
-        "  - " + urlList,
-        "",
-        "--- FULL INTERNET HEADERS ---",
-        captured.headers
-      ].join("\n");
-
-      try {
-        Office.context.mailbox.displayNewMessageForm({
-          toRecipients: [REPORT_TO],
-          subject: urgency.emoji + " " + urgency.level + " — SUSPICIOUS EMAIL — " + captured.subject + " — " + captured.reporterEmail,
-          htmlBody: "<pre style='font-family:Consolas,monospace;font-size:12px;'>" + body.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</pre>"
-        });
-        status.className = "success"; status.style.display = "block";
-        status.textContent = "✅ Report drafted. Review and hit Send. Do not interact further with this email.";
-      } catch(e) {
-        status.className = "error"; status.style.display = "block";
-        status.textContent = "❌ Error: " + e.message;
-      }
-    }
-
-    function setSafetyStatus(msg) { const el = document.getElementById("safety-status"); if (el) el.textContent = msg; }
-    function esc(s) { const d = document.createElement("div"); d.textContent = s||""; return d.innerHTML; }
-  </script>
+  <script src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
+  <script src="taskpane.js"></script>
 </body>
 </html>

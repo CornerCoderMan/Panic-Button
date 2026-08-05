@@ -1,5 +1,5 @@
 /* ============================================================
-   Email Safety Checker — Task Pane Styles
+   Report This! — Task Pane Styles
    ============================================================ */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -294,6 +294,68 @@ body {
   color: #6d4b00;
   background: #fff4ce;
   border: 1px solid #f0d86e;
+}
+
+/* ---------- Intake form ---------- */
+#header { background: var(--color-danger); }
+
+.q {
+  border: none;
+  margin: 0 0 14px;
+  padding: 0;
+}
+
+.q legend {
+  font-weight: 600;
+  font-size: 12.5px;
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--color-text);
+  line-height: 1.35;
+}
+
+.q .optional { font-weight: 400; color: var(--color-muted); }
+
+.q label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: 14px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.q input[type="radio"] { cursor: pointer; }
+
+.q select,
+.q textarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--color-text);
+  padding: 7px 9px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+}
+
+.q textarea { resize: vertical; line-height: 1.4; }
+
+.q select:focus,
+.q textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(0,120,212,.15);
+}
+
+/* ---------- Done state ---------- */
+.done-icon { font-size: 34px; text-align: center; margin: 18px 0 8px; }
+.done-title {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-safe);
+  margin-bottom: 8px;
 }
 
 /* ---------- Error state ---------- */

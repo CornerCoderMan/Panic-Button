@@ -1,7 +1,7 @@
 {
-  "name": "email-safety-checker",
-  "version": "1.1.0",
-  "description": "Outlook Add-in to check if an email is safe using rule-based analysis and Claude AI",
+  "name": "report-this",
+  "version": "2.0.0",
+  "description": "Report This! — Outlook add-in that reports a suspicious email to IT: captures full headers, asks a few triage questions, and drafts a report to the support team with the original message attached.",
   "scripts": {
     "start": "office-addin-dev-certs install --prompt && node server.js --https",
     "start:http": "node server.js",

@@ -1,22 +1,32 @@
 /* ============================================================
-   Email Safety Checker — Task Pane Logic
+   Report This! — Task Pane Logic
    ============================================================
 
-   Architecture:
-     1. Office.js reads the current email (sender, subject, body, attachments, headers)
-     2. Rule engine runs synchronous checks and produces a risk score + flags
-     3. Sends a limited excerpt to the server-side AI proxy when configured
-     4. UI renders verdict, score, red flags, and suggested actions
+   Post-click incident reporter for Outlook.
 
-   Provider credentials remain on the server and are never exposed to the pane.
+   Flow:
+     1. User opens a suspicious message and clicks "Report This!"
+     2. Task pane asks a few triage questions (clicked? entered
+        credentials? opened attachment? replied? when?)
+     3. Office.js reads the message (sender, subject, links,
+        attachments, body excerpt) and the FULL internet headers
+     4. A lightweight rule engine adds "automated flags" for context
+     5. A pre-filled report opens as a new message to the support
+        team, with the ORIGINAL message forwarded as an attachment
+     6. The user reviews and clicks Send — nothing leaves the
+        mailbox automatically
+
+   Runs entirely client-side. Requires Mailbox requirement set 1.8
+   (for getAllInternetHeadersAsync). Permission: ReadItem.
    ============================================================ */
 
 "use strict";
 
-// ── Constants ────────────────────────────────────────────────────────────────
+// ── Configuration ─────────────────────────────────────────────────────────────
 
-const AI_PROXY_URL = "/api/analyze";
-const AI_ENABLED = false; // GitHub Pages pilot: no server-side proxy is available.
+const SUPPORT_ADDRESS = "support@mattnj.com";
+
+// ── Constants (rule engine) ───────────────────────────────────────────────────
 
 // Known URL shortener domains (non-exhaustive — extend as needed)
 const URL_SHORTENERS = new Set([
@@ -45,11 +55,6 @@ const URGENCY_PATTERNS = [
   { re: /\b(your (account|access) (will be|has been) (locked|disabled|suspended))\b/i, weight: 20, label: "Account lockout threat" },
 ];
 
-// Patterns that reduce suspicion
-const SAFE_INDICATORS = [
-  { re: /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/, type: "sender", label: "Sender email is well-formed" },
-];
-
 // ── State ─────────────────────────────────────────────────────────────────────
 
 let officeReady = false;
@@ -70,45 +75,63 @@ if (typeof Office !== "undefined") {
 // ── UI initialization ─────────────────────────────────────────────────────────
 
 function initUI() {
-  // Primary analyze button
-  el("analyze-btn").addEventListener("click", runAnalysis);
-  el("reanalyze-btn").addEventListener("click", resetToIdle);
-  el("retry-btn").addEventListener("click", runAnalysis);
+  const supportLabel = el("support-addr");
+  if (supportLabel) supportLabel.textContent = SUPPORT_ADDRESS;
+
+  el("report-form").addEventListener("submit", event => {
+    event.preventDefault();
+    submitReport();
+  });
+  el("retry-btn").addEventListener("click", resetToForm);
+  el("another-btn").addEventListener("click", resetToForm);
 
   setFooterStatus("Ready");
 }
 
-// ── Main analysis flow ────────────────────────────────────────────────────────
+// ── Main flow ─────────────────────────────────────────────────────────────────
 
-async function runAnalysis() {
-  showLoading("Reading email…");
+async function submitReport() {
+  showLoading("Reading this email…");
 
   try {
+    const answers = collectAnswers();
     const emailData = await readEmail();
-    setLoadingMessage("Running safety checks…");
 
+    setLoadingMessage("Running automated checks…");
     const ruleResult = runRuleEngine(emailData);
 
-    let aiResult = null;
-    let aiWarning = null;
+    setLoadingMessage("Preparing report…");
+    const subject = buildReportSubject(emailData, answers);
+    const htmlBody = buildReportHtml(emailData, answers, ruleResult);
 
-    if (AI_ENABLED) {
-      setLoadingMessage("Checking optional AI analysis…");
-      try {
-        aiResult = await callAiProxy(emailData, ruleResult);
-      } catch (aiErr) {
-        console.warn("AI analysis unavailable:", aiErr.message);
-        aiWarning = `${aiErr.message} Results below use rule-based checks only.`;
-      }
-    }
-
-    const finalResult = reconcileAiVerdict(ruleResult, aiResult?.verdict);
-    showResults(finalResult, aiResult?.text || null, aiWarning);
+    const attachedOriginal = openReportDraft(emailData, subject, htmlBody);
+    showDone(attachedOriginal);
 
   } catch (err) {
-    console.error("Analysis failed:", err);
-    showError(err.message || "An unexpected error occurred.");
+    console.error("Report failed:", err);
+    showError(err.message || "An unexpected error occurred while building the report.");
   }
+}
+
+// Collect the triage answers from the form.
+function collectAnswers() {
+  const radio = name => {
+    const checked = document.querySelector(`input[name="${name}"]:checked`);
+    return checked ? checked.value : "Not sure";
+  };
+  return {
+    clicked:     radio("clicked"),
+    credentials: radio("credentials"),
+    attachment:  radio("attachment"),
+    replied:     radio("replied"),
+    when:        el("when-select") ? el("when-select").value : "Not sure",
+    notes:       el("notes") ? el("notes").value.trim() : "",
+  };
+}
+
+// True if the user took a high-impact action (drives urgency in the report).
+function isHighImpact(answers) {
+  return answers.clicked === "Yes" || answers.credentials === "Yes" || answers.replied === "Yes";
 }
 
 // ── Email reader ──────────────────────────────────────────────────────────────
@@ -116,9 +139,10 @@ async function runAnalysis() {
 function readEmail() {
   return new Promise((resolve, reject) => {
     const item = Office.context.mailbox.item;
-    if (!item) { reject(new Error("No email is currently open.")); return; }
+    if (!item) { reject(new Error("No email is currently open. Open a message, then click Report This!.")); return; }
 
     const emailData = {
+      itemId:       item.itemId || null,
       subject:      item.subject || "",
       senderName:   item.sender?.displayName || item.from?.displayName || "",
       senderEmail:  item.sender?.emailAddress || item.from?.emailAddress || "",
@@ -131,23 +155,27 @@ function readEmail() {
         type: a.attachmentType,
         contentType: a.contentType || ""
       })),
-      receivedTime: item.dateTimeCreated,
+      receivedTime: item.dateTimeCreated || null,
+      fullHeaders:  "",
     };
 
-    // Try to get reply-to from internet headers
+    // Full internet headers (Mailbox 1.8+). Also used to derive Reply-To.
     if (item.getAllInternetHeadersAsync) {
       item.getAllInternetHeadersAsync(headersResult => {
-        if (headersResult.status === Office.AsyncResultStatus.Succeeded) {
+        if (headersResult.status === Office.AsyncResultStatus.Succeeded && headersResult.value) {
+          emailData.fullHeaders = headersResult.value;
           const unfoldedHeaders = headersResult.value.replace(/\r?\n[\t ]+/g, " ");
           const replyToMatch = unfoldedHeaders.match(/^Reply-To:\s*(.+)$/im);
           if (replyToMatch) {
             emailData.replyTo = extractMailboxAddress(replyToMatch[1]) || replyToMatch[1].trim();
           }
+        } else {
+          emailData.fullHeaders = "(Full internet headers were not available on this Outlook client or version.)";
         }
-        // Now get body
         getBody(item, emailData, resolve, reject);
       });
     } else {
+      emailData.fullHeaders = "(Full internet headers are not supported by this Outlook client — requires Mailbox 1.8+.)";
       getBody(item, emailData, resolve, reject);
     }
   });
@@ -156,12 +184,11 @@ function readEmail() {
 function getBody(item, emailData, resolve, reject) {
   item.body.getAsync(Office.CoercionType.Text, { asyncContext: null }, result => {
     if (result.status !== Office.AsyncResultStatus.Succeeded) {
-      reject(new Error("Could not read email body."));
+      reject(new Error("Could not read the email body."));
       return;
     }
     emailData.bodyText = result.value || "";
 
-    // Extract links from HTML body for deeper analysis
     item.body.getAsync(Office.CoercionType.Html, {}, htmlResult => {
       if (htmlResult.status === Office.AsyncResultStatus.Succeeded && htmlResult.value) {
         emailData.links = extractLinksFromHtml(htmlResult.value);
@@ -171,31 +198,147 @@ function getBody(item, emailData, resolve, reject) {
   });
 }
 
-// ── Link extraction ───────────────────────────────────────────────────────────
+// ── Report draft ──────────────────────────────────────────────────────────────
 
-function extractLinksFromHtml(html) {
-  if (typeof DOMParser !== "undefined") {
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    return Array.from(doc.querySelectorAll("a[href]")).map(anchor => ({
-      href: anchor.getAttribute("href").trim(),
-      display: anchor.textContent.replace(/\s+/g, " ").trim(),
-    }));
+// Opens a pre-filled new message to support. Returns true if the original
+// message was attached, false if it had to be skipped (no item id available).
+function openReportDraft(emailData, subject, htmlBody) {
+  const parameters = {
+    toRecipients: [SUPPORT_ADDRESS],
+    subject,
+    htmlBody,
+  };
+
+  let attachedOriginal = false;
+  if (emailData.itemId) {
+    parameters.attachments = [{
+      type: "item",
+      itemId: emailData.itemId,
+      name: attachmentName(emailData.subject),
+    }];
+    attachedOriginal = true;
   }
 
-  const links = [];
-  // Match <a href="...">display text</a>
-  const hrefRe = /<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-  let m;
-  while ((m = hrefRe.exec(html)) !== null) {
-    const href    = m[1].trim();
-    const display = stripTags(m[2]).trim();
-    links.push({ href, display });
-  }
-  return links;
+  Office.context.mailbox.displayNewMessageForm(parameters);
+  return attachedOriginal;
 }
 
-function stripTags(html) {
-  return html.replace(/<[^>]+>/g, "").replace(/\s+/g, " ");
+function attachmentName(subject) {
+  const clean = String(subject || "").replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  return clean ? `Reported - ${clean}` : "Reported message";
+}
+
+// ── Report content builders (pure — unit tested) ──────────────────────────────
+
+function buildReportSubject(emailData, answers) {
+  const base = String(emailData.subject || "(no subject)").replace(/[\r\n]+/g, " ").trim();
+  const prefix = isHighImpact(answers) ? "[ACTION NEEDED] " : "";
+  return `${prefix}Suspicious email report: ${base}`.slice(0, 255);
+}
+
+function buildReportHtml(emailData, answers, ruleResult) {
+  const rows = [
+    ["Reported by", currentUserEmail()],
+    ["Clicked a link?", answers.clicked],
+    ["Entered credentials / personal info?", answers.credentials],
+    ["Opened / downloaded an attachment?", answers.attachment],
+    ["Replied or sent information back?", answers.replied],
+    ["When did it happen?", answers.when],
+  ];
+
+  const impactBanner = isHighImpact(answers)
+    ? `<p style="margin:0 0 14px;padding:10px 12px;background:#fde7e9;border:1px solid #f4abab;border-radius:6px;color:#a4262c;">
+         <strong>⚠ Possible account exposure.</strong> The reporter indicated they clicked a link, entered
+         information, or replied. Treat this as time-sensitive.
+       </p>`
+    : "";
+
+  const answersTable = rows.map(([k, v]) =>
+    `<tr><td style="padding:3px 10px 3px 0;color:#605e5c;white-space:nowrap;vertical-align:top;">${esc(k)}</td>` +
+    `<td style="padding:3px 0;"><strong>${esc(v || "—")}</strong></td></tr>`
+  ).join("");
+
+  const notesBlock = answers.notes
+    ? `<h3 style="margin:16px 0 4px;font-size:13px;">Notes from the reporter</h3>
+       <div style="white-space:pre-wrap;padding:8px 10px;background:#faf9f8;border:1px solid #edebe9;border-radius:6px;">${esc(answers.notes)}</div>`
+    : "";
+
+  const msgRows = [
+    ["From (display name)", emailData.senderName],
+    ["From (address)", emailData.senderEmail],
+    ["Reply-To", emailData.replyTo || "(same as sender or not set)"],
+    ["To", (emailData.toRecipients || []).join(", ")],
+    ["Subject", emailData.subject],
+    ["Received", formatDate(emailData.receivedTime)],
+  ].map(([k, v]) =>
+    `<tr><td style="padding:3px 10px 3px 0;color:#605e5c;white-space:nowrap;vertical-align:top;">${esc(k)}</td>` +
+    `<td style="padding:3px 0;">${esc(v || "—")}</td></tr>`
+  ).join("");
+
+  const linksBlock = (emailData.links && emailData.links.length)
+    ? `<h3 style="margin:16px 0 4px;font-size:13px;">Links in the message (${emailData.links.length})</h3>
+       <ul style="margin:0;padding-left:18px;">` +
+      emailData.links.slice(0, 40).map(l =>
+        `<li style="margin-bottom:3px;">${esc(l.display || "(no text)")} &rarr; <code>${esc(l.href)}</code></li>`
+      ).join("") +
+      (emailData.links.length > 40 ? `<li>… and ${emailData.links.length - 40} more</li>` : "") +
+      `</ul>`
+    : `<p style="margin:16px 0 0;color:#605e5c;">No links found in the message body.</p>`;
+
+  const attBlock = (emailData.attachments && emailData.attachments.length)
+    ? `<h3 style="margin:16px 0 4px;font-size:13px;">Attachments (${emailData.attachments.length})</h3>
+       <ul style="margin:0;padding-left:18px;">` +
+      emailData.attachments.map(a => `<li>${esc(a.name)}${a.contentType ? ` <span style="color:#605e5c;">(${esc(a.contentType)})</span>` : ""}</li>`).join("") +
+      `</ul>`
+    : `<p style="margin:16px 0 0;color:#605e5c;">No attachments on the message.</p>`;
+
+  const flagsBlock = (ruleResult && ruleResult.flags && ruleResult.flags.length)
+    ? `<h3 style="margin:16px 0 4px;font-size:13px;">Automated flags (score ${ruleResult.score}/100 — ${esc(ruleResult.verdict)})</h3>
+       <ul style="margin:0;padding-left:18px;">` +
+      ruleResult.flags.map(f => `<li style="margin-bottom:3px;color:#a4262c;">${esc(f)}</li>`).join("") +
+      `</ul>`
+    : `<p style="margin:16px 0 0;color:#605e5c;">Automated checks (score ${ruleResult ? ruleResult.score : 0}/100) found no specific red flags. This does not mean the message is safe.</p>`;
+
+  const attachmentNote = emailData.itemId
+    ? `<p style="margin:0 0 14px;color:#605e5c;">The original message is attached to this report for full analysis.</p>`
+    : `<p style="margin:0 0 14px;padding:8px 10px;background:#fff4ce;border:1px solid #f0d86e;border-radius:6px;color:#6d4b00;">
+         The original message could not be attached automatically on this client. Please attach or forward it manually.
+       </p>`;
+
+  return `<div style="font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;color:#323130;line-height:1.5;">
+  <h2 style="margin:0 0 10px;font-size:16px;">🚩 Suspicious Email Report</h2>
+  ${impactBanner}
+  ${attachmentNote}
+  <h3 style="margin:0 0 4px;font-size:13px;">What the reporter said</h3>
+  <table style="border-collapse:collapse;font-size:13px;">${answersTable}</table>
+  ${notesBlock}
+  <h3 style="margin:16px 0 4px;font-size:13px;">Message details</h3>
+  <table style="border-collapse:collapse;font-size:13px;">${msgRows}</table>
+  ${linksBlock}
+  ${attBlock}
+  ${flagsBlock}
+  <h3 style="margin:16px 0 4px;font-size:13px;">Full internet headers</h3>
+  <pre style="white-space:pre-wrap;word-break:break-word;background:#faf9f8;border:1px solid #edebe9;border-radius:6px;padding:10px;font-size:11px;overflow-x:auto;">${esc(emailData.fullHeaders)}</pre>
+  <p style="margin:14px 0 0;color:#a19f9d;font-size:11px;">Generated by Report This! · Review before sending.</p>
+</div>`;
+}
+
+function currentUserEmail() {
+  try {
+    return Office.context.mailbox.userProfile?.emailAddress || "";
+  } catch {
+    return "";
+  }
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  try {
+    const d = value instanceof Date ? value : new Date(value);
+    return isNaN(d.getTime()) ? String(value) : d.toLocaleString();
+  } catch {
+    return String(value);
+  }
 }
 
 // ── Rule engine ───────────────────────────────────────────────────────────────
@@ -205,12 +348,9 @@ function runRuleEngine(email) {
   const safeOk  = [];  // Safe indicator strings
   let   score   = 0;   // 0–100, higher = riskier
 
-  // ── 1. Sender analysis ────────────────────────────────────────────────────
-
-  const senderEmail = email.senderEmail.toLowerCase();
+  const senderEmail = String(email.senderEmail || "").toLowerCase();
   const senderDomain = extractDomain(senderEmail);
 
-  // Display name contains a different domain than the actual email
   if (email.senderName) {
     const nameEmailMatch = email.senderName.match(/[a-zA-Z0-9._%+\-]+@([a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/);
     if (nameEmailMatch) {
@@ -222,16 +362,14 @@ function runRuleEngine(email) {
     }
   }
 
-  // Lookalike domains (e.g. paypa1.com, micosoft.com)
   const lookalikes = checkLookalikeDomaIn(senderDomain);
   if (lookalikes) {
     flags.push(`Sender domain "${senderDomain}" resembles trusted domain "${lookalikes}" — possible typosquatting`);
     score += 40;
   }
 
-  // Free email hosting for a "business" sender
   const freeEmailHosts = ["gmail.com","yahoo.com","hotmail.com","outlook.com","aol.com","protonmail.com","icloud.com"];
-  const senderNameLower = email.senderName.toLowerCase();
+  const senderNameLower = String(email.senderName || "").toLowerCase();
   const looksLikeBusiness = (
     senderNameLower.includes("support") ||
     senderNameLower.includes("service") ||
@@ -247,20 +385,16 @@ function runRuleEngine(email) {
     score += 25;
   }
 
-  // Reply-to differs from sender
   if (email.replyTo) {
-    const replyDomain = extractDomain(email.replyTo.toLowerCase());
+    const replyDomain = extractDomain(String(email.replyTo).toLowerCase());
     if (replyDomain && senderDomain && replyDomain !== senderDomain) {
       flags.push(`Reply-To (${email.replyTo}) is a different domain than the sender (${senderDomain})`);
       score += 20;
     }
   }
 
-  // ── 2. Subject analysis ───────────────────────────────────────────────────
+  const subject = String(email.subject || "");
 
-  const subject = email.subject;
-
-  // Excessive punctuation / caps
   if (/[!?]{2,}/.test(subject)) {
     flags.push("Subject line uses multiple exclamation/question marks");
     score += 8;
@@ -270,13 +404,9 @@ function runRuleEngine(email) {
     score += 10;
   }
 
-  // ── 3. Body analysis ─────────────────────────────────────────────────────
-
-  const body = email.bodyText;
+  const body = String(email.bodyText || "");
   const messageText = `${subject}\n${body}`;
-  const bodyLower = body.toLowerCase();
 
-  // Urgency patterns
   for (const p of URGENCY_PATTERNS) {
     if (p.re.test(messageText)) {
       flags.push(p.label);
@@ -284,84 +414,46 @@ function runRuleEngine(email) {
     }
   }
 
-  // Asks for sensitive info
   if (/\b(social security|ssn|date of birth|credit card|bank account|routing number|mother['']?s maiden|password)\b/i.test(body)) {
     flags.push("Email asks for sensitive personal or financial information");
     score += 30;
   }
 
-  // Contains phone number with pressured CTA
   if (/call\s+(us|now|immediately)\s+(at|on)?\s*[\+\d\s\-\(\)]{7,}/i.test(body)) {
     flags.push("Email pressures you to call a phone number immediately");
     score += 15;
   }
 
-  // ── 4. Link analysis ─────────────────────────────────────────────────────
+  let ipLinkCount = 0, shortenerCount = 0, mismatchCount = 0, httpCount = 0;
 
-  let ipLinkCount      = 0;
-  let shortenerCount   = 0;
-  let mismatchCount    = 0;
-  let httpCount        = 0;
-
-  for (const link of email.links) {
+  for (const link of (email.links || [])) {
     const { href, display } = link;
 
-    // IP-based URL
-    if (/^https?:\/\/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/i.test(href)) {
-      ipLinkCount++;
-    }
+    if (/^https?:\/\/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/i.test(href)) ipLinkCount++;
 
-    // URL shortener
-    const hrefDomain = extractDomain(href.toLowerCase());
-    if (URL_SHORTENERS.has(hrefDomain)) {
-      shortenerCount++;
-    }
+    const hrefDomain = extractDomain(String(href).toLowerCase());
+    if (URL_SHORTENERS.has(hrefDomain)) shortenerCount++;
 
-    // Mismatched display text vs href (display looks like a URL but differs)
     if (/https?:\/\//i.test(display)) {
-      const dispDomain = extractDomain(display.toLowerCase());
-      if (dispDomain && hrefDomain && dispDomain !== hrefDomain) {
-        mismatchCount++;
-      }
+      const dispDomain = extractDomain(String(display).toLowerCase());
+      if (dispDomain && hrefDomain && dispDomain !== hrefDomain) mismatchCount++;
     }
 
-    // Plain HTTP (not HTTPS)
-    if (/^http:\/\//i.test(href)) {
-      httpCount++;
-    }
+    if (/^http:\/\//i.test(href)) httpCount++;
   }
 
-  if (ipLinkCount > 0) {
-    flags.push(`${ipLinkCount} link(s) go to raw IP addresses instead of domain names`);
-    score += ipLinkCount * 20;
-  }
+  if (ipLinkCount > 0)    { flags.push(`${ipLinkCount} link(s) go to raw IP addresses instead of domain names`); score += ipLinkCount * 20; }
+  if (shortenerCount > 0) { flags.push(`${shortenerCount} link(s) use URL shorteners — destination hidden`); score += shortenerCount * 15; }
+  if (mismatchCount > 0)  { flags.push(`${mismatchCount} link(s) show a different URL in text than the actual destination`); score += mismatchCount * 25; }
+  if (httpCount > 0 && (email.links || []).length > 0) { flags.push(`${httpCount} link(s) use unencrypted HTTP instead of HTTPS`); score += httpCount * 5; }
 
-  if (shortenerCount > 0) {
-    flags.push(`${shortenerCount} link(s) use URL shorteners — destination hidden`);
-    score += shortenerCount * 15;
-  }
-
-  if (mismatchCount > 0) {
-    flags.push(`${mismatchCount} link(s) show a different URL in text than the actual destination`);
-    score += mismatchCount * 25;
-  }
-
-  if (httpCount > 0 && email.links.length > 0) {
-    flags.push(`${httpCount} link(s) use unencrypted HTTP instead of HTTPS`);
-    score += httpCount * 5;
-  }
-
-  // ── 5. Attachment analysis ────────────────────────────────────────────────
-
-  for (const att of email.attachments) {
-    const ext = att.name.split(".").pop().toLowerCase();
+  for (const att of (email.attachments || [])) {
+    const ext = String(att.name || "").split(".").pop().toLowerCase();
     if (DANGEROUS_EXTENSIONS.has(ext)) {
       flags.push(`Attachment "${att.name}" has a potentially dangerous file type (.${ext})`);
       score += 40;
     }
-
-    // Double extension (e.g., invoice.pdf.exe)
-    const parts = att.name.split(".");
+    const parts = String(att.name || "").split(".");
     if (parts.length >= 3) {
       const outerExt = parts[parts.length - 1].toLowerCase();
       const innerExt = parts[parts.length - 2].toLowerCase();
@@ -372,36 +464,18 @@ function runRuleEngine(email) {
     }
   }
 
-  // ── 6. Safe indicators ───────────────────────────────────────────────────
-
-  if (flags.length === 0) {
-    safeOk.push("No spoofing or mismatched sender information detected");
-  }
-  if (email.links.length > 0 && ipLinkCount === 0 && shortenerCount === 0 && mismatchCount === 0 && httpCount === 0) {
+  if (flags.length === 0) safeOk.push("No spoofing or mismatched sender information detected");
+  if ((email.links || []).length > 0 && ipLinkCount === 0 && shortenerCount === 0 && mismatchCount === 0 && httpCount === 0)
     safeOk.push("No obvious URL hiding or unencrypted links detected");
-  }
-  if (email.attachments.length === 0) {
-    safeOk.push("No attachments");
-  }
-  if (!URGENCY_PATTERNS.some(p => p.re.test(messageText))) {
-    safeOk.push("No urgency or social-engineering language found");
-  }
-
-  // ── Score capping + verdict ───────────────────────────────────────────────
+  if ((email.attachments || []).length === 0) safeOk.push("No attachments");
+  if (!URGENCY_PATTERNS.some(p => p.re.test(messageText))) safeOk.push("No urgency or social-engineering language found");
 
   score = Math.min(100, score);
 
   let verdict, level;
-  if (score >= 60) {
-    verdict = "Likely Unsafe";
-    level   = "danger";
-  } else if (score >= 25 || flags.length > 0) {
-    verdict = "Exercise Caution";
-    level   = "warning";
-  } else {
-    verdict = "No Obvious Warning Signs";
-    level   = "safe";
-  }
+  if (score >= 60)                         { verdict = "Likely Unsafe"; level = "danger"; }
+  else if (score >= 25 || flags.length > 0){ verdict = "Exercise Caution"; level = "warning"; }
+  else                                     { verdict = "No Obvious Warning Signs"; level = "safe"; }
 
   return { score, verdict, level, flags, safeOk };
 }
@@ -444,209 +518,31 @@ function levenshtein(a, b) {
   return dp[m][n];
 }
 
-// ── Server-side AI analysis ───────────────────────────────────────────────────
+// ── Link extraction ───────────────────────────────────────────────────────────
 
-async function callAiProxy(email, ruleResult) {
-  const response = await fetch(AI_PROXY_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email: {
-        senderName: email.senderName,
-        senderEmail: email.senderEmail,
-        subject: email.subject,
-        replyTo: email.replyTo,
-        bodySnippet: email.bodyText.slice(0, 1200).replace(/\s+/g, " ").trim(),
-        links: email.links.slice(0, 10),
-        attachmentNames: email.attachments.slice(0, 20).map(a => a.name),
-      },
-      ruleResult: {
-        score: ruleResult.score,
-        verdict: ruleResult.verdict,
-        flags: ruleResult.flags.slice(0, 20),
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || `AI service returned error ${response.status}.`);
+function extractLinksFromHtml(html) {
+  if (typeof DOMParser !== "undefined") {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return Array.from(doc.querySelectorAll("a[href]")).map(anchor => ({
+      href: anchor.getAttribute("href").trim(),
+      display: anchor.textContent.replace(/\s+/g, " ").trim(),
+    }));
   }
 
-  return response.json();
+  const links = [];
+  const hrefRe = /<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = hrefRe.exec(html)) !== null) {
+    links.push({ href: m[1].trim(), display: stripTags(m[2]).trim() });
+  }
+  return links;
 }
 
-function reconcileAiVerdict(ruleResult, aiVerdict) {
-  const normalized = String(aiVerdict || "").toUpperCase();
-  const result = { ...ruleResult, flags: [...ruleResult.flags], safeOk: [...ruleResult.safeOk] };
-
-  // AI can raise risk, but never override concrete rule findings to lower it.
-  if (normalized === "UNSAFE" && result.score < 60) {
-    result.score = 60;
-    result.verdict = "Likely Unsafe";
-    result.level = "danger";
-    result.flags.push("AI analysis identified additional high-risk context");
-  } else if (normalized === "CAUTION" && result.score < 25) {
-    result.score = 25;
-    result.verdict = "Exercise Caution";
-    result.level = "warning";
-    result.flags.push("AI analysis identified context that warrants caution");
-  }
-
-  return result;
+function stripTags(html) {
+  return html.replace(/<[^>]+>/g, "").replace(/\s+/g, " ");
 }
 
-// ── UI rendering ──────────────────────────────────────────────────────────────
-
-function showResults(ruleResult, aiText, aiWarning) {
-  hideAll();
-  el("results-state").classList.remove("hidden");
-
-  const { score, verdict, level, flags, safeOk } = ruleResult;
-
-  // Verdict banner
-  const banner = el("verdict-banner");
-  banner.className = level;
-  el("verdict-icon").textContent = level === "safe" ? "✅" : level === "warning" ? "⚠️" : "🚨";
-  const vLabel = el("verdict-label");
-  vLabel.textContent = verdict;
-  vLabel.className = level;
-  el("verdict-summary").textContent =
-    level === "safe"    ? "Automated checks found no obvious warning signs, but cannot guarantee this email is safe." :
-    level === "warning" ? "Some suspicious patterns detected — proceed carefully." :
-                          "Multiple red flags detected — do not click links or reply.";
-
-  // Score bar
-  el("score-value").textContent = `${score} / 100`;
-  const bar = el("score-bar");
-  bar.style.width = `${score}%`;
-  bar.className = `score-bar ${level}`;
-
-  // Flags
-  const flagsSection = el("flags-section");
-  if (flags.length > 0) {
-    const list = el("flags-list");
-    list.innerHTML = "";
-    flags.forEach(f => {
-      const li = document.createElement("li");
-      li.textContent = f;
-      list.appendChild(li);
-    });
-    flagsSection.classList.remove("hidden");
-  } else {
-    flagsSection.classList.add("hidden");
-  }
-
-  // Safe indicators
-  const safeSection = el("safe-section");
-  if (safeOk.length > 0) {
-    const list = el("safe-list");
-    list.innerHTML = "";
-    safeOk.forEach(s => {
-      const li = document.createElement("li");
-      li.textContent = s;
-      list.appendChild(li);
-    });
-    safeSection.classList.remove("hidden");
-  }
-
-  // Suggested actions
-  const actions = buildSuggestedActions(level, flags, ruleResult);
-  const actList = el("actions-list");
-  actList.innerHTML = "";
-  actions.forEach(a => {
-    const card = document.createElement("div");
-    card.className = "action-card";
-    card.innerHTML = `
-      <div class="action-icon">${a.icon}</div>
-      <div>
-        <div class="action-title">${a.title}</div>
-        <div class="action-desc">${a.desc}</div>
-      </div>`;
-    actList.appendChild(card);
-  });
-
-  // AI analysis
-  const aiSection = el("ai-section");
-  if (aiText) {
-    el("ai-text").textContent = aiText;
-    aiSection.classList.remove("hidden");
-  } else {
-    aiSection.classList.add("hidden");
-  }
-
-  const warning = el("ai-warning");
-  if (aiWarning) {
-    warning.textContent = aiWarning;
-    warning.classList.remove("hidden");
-  } else {
-    warning.classList.add("hidden");
-  }
-
-  setFooterStatus(`Last checked: ${new Date().toLocaleTimeString()}`);
-}
-
-function buildSuggestedActions(level, flags, result) {
-  const actions = [];
-
-  if (level === "danger") {
-    actions.push({
-      icon: "🚫",
-      title: "Do not click any links",
-      desc: "Links in this email may redirect you to fake login pages or download malware. Hover before you click — if the URL looks suspicious, don't."
-    });
-    actions.push({
-      icon: "🗑️",
-      title: "Delete this email",
-      desc: "Unless you are certain this email is legitimate (call the sender via a known number to verify), delete it immediately."
-    });
-    actions.push({
-      icon: "📣",
-      title: "Report as phishing",
-      desc: "In Outlook: right-click → Report → Phishing. This helps protect others in your organization."
-    });
-    if (result.flags.some(f => f.includes("attachment"))) {
-      actions.push({
-        icon: "📎",
-        title: "Do not open attachments",
-        desc: "Attached files could contain malware. Even if it looks like a PDF, it may be disguised."
-      });
-    }
-  } else if (level === "warning") {
-    actions.push({
-      icon: "🔍",
-      title: "Verify the sender independently",
-      desc: "If this email appears to be from a company or colleague, confirm by calling them directly using a number from their official website — not from this email."
-    });
-    actions.push({
-      icon: "🖱️",
-      title: "Hover over links before clicking",
-      desc: "Check that the link destination matches the displayed text. If anything seems off, don't click."
-    });
-    if (result.flags.some(f => f.includes("credentials") || f.includes("verify"))) {
-      actions.push({
-        icon: "🔐",
-        title: "Never enter credentials via email links",
-        desc: "Go directly to the website by typing the URL into your browser — don't use any link in this email to log in."
-      });
-    }
-  } else {
-    actions.push({
-      icon: "✅",
-      title: "Continue with normal caution",
-      desc: "Automated checks found no obvious warning signs. Independently verify unexpected requests before replying, opening attachments, or following links."
-    });
-    actions.push({
-      icon: "💡",
-      title: "Tip: Stay vigilant",
-      desc: "Even safe-looking emails can be sophisticated phishing attempts. Never share passwords or sensitive info via email."
-    });
-  }
-
-  return actions;
-}
-
-// ── Loading / error helpers ───────────────────────────────────────────────────
+// ── UI state helpers ──────────────────────────────────────────────────────────
 
 function showLoading(msg) {
   hideAll();
@@ -658,30 +554,55 @@ function setLoadingMessage(msg) {
   el("loading-message").textContent = msg;
 }
 
+function showDone(attachedOriginal) {
+  hideAll();
+  el("done-state").classList.remove("hidden");
+  const fallback = el("done-fallback");
+  if (!attachedOriginal) {
+    fallback.textContent = "Note: the original message couldn't be attached automatically on this Outlook client. Please attach or forward it manually before sending.";
+    fallback.classList.remove("hidden");
+  } else {
+    fallback.classList.add("hidden");
+  }
+  setFooterStatus(`Report drafted: ${new Date().toLocaleTimeString()}`);
+}
+
 function showError(msg) {
   hideAll();
   el("error-state").classList.remove("hidden");
   el("error-message").textContent = msg;
 }
 
-function resetToIdle() {
+function resetToForm() {
   hideAll();
-  el("idle-state").classList.remove("hidden");
+  el("form-state").classList.remove("hidden");
+  setFooterStatus("Ready");
 }
 
 function hideAll() {
-  ["idle-state","loading-state","results-state","error-state"].forEach(id => {
-    el(id).classList.add("hidden");
+  ["form-state","loading-state","done-state","error-state"].forEach(id => {
+    const node = el(id);
+    if (node) node.classList.add("hidden");
   });
 }
 
 function setFooterStatus(msg) {
-  el("footer-status").textContent = msg;
+  const node = el("footer-status");
+  if (node) node.textContent = msg;
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 function el(id) { return document.getElementById(id); }
+
+function esc(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 function extractDomain(str) {
   const value = String(str || "").trim().toLowerCase();
@@ -705,14 +626,21 @@ function extractMailboxAddress(value) {
   return plainAddress ? plainAddress[0].toLowerCase() : null;
 }
 
+// ── Exports for tests (Node) ──────────────────────────────────────────────────
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
+    SUPPORT_ADDRESS,
     checkLookalikeDomaIn,
     extractDomain,
     extractMailboxAddress,
     extractLinksFromHtml,
     levenshtein,
-    reconcileAiVerdict,
     runRuleEngine,
+    buildReportSubject,
+    buildReportHtml,
+    isHighImpact,
+    attachmentName,
+    esc,
   };
 }
